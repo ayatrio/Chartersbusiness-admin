@@ -20,12 +20,6 @@ const PROFILE_NAV_ITEMS = [
   { to: '/ai-tools',    icon: RiRobotLine,         label: 'AI Tools'     }
 ];
 
-const HOME_NAV_ITEMS = [
-  { to: '/home', icon: RiUser3Line, label: 'Account' },
-  { to: '/dashboard', icon: RiDashboardLine, label: 'Profile Dashboard' },
-  { icon: RiRobotLine, label: 'AI Interview', disabled: true, note: 'Coming soon' }
-];
-
 const ADMIN_NAV_ITEMS = [
   { to: '/admin', icon: RiSettings3Line, label: 'Users & Permissions' },
   { to: '/admin/dashboard', icon: RiDashboardLine, label: 'Admin Dashboard' },
@@ -50,6 +44,19 @@ export default function Sidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const pathname = location.pathname || '';
+  const hasAiInterviewAccess = (
+    user?.role === 'admin'
+    || user?.role === 'recruiter'
+    || Object.values(user?.permissions?.aiInterview || {}).some(Boolean)
+  );
+
+  const homeNavItems = [
+    { to: '/home', icon: RiUser3Line, label: 'Account' },
+    { to: '/dashboard', icon: RiDashboardLine, label: 'Profile Dashboard' },
+    hasAiInterviewAccess
+      ? { to: '/ai-interview', icon: RiRobotLine, label: 'AI Interview' }
+      : { icon: RiRobotLine, label: 'AI Interview', disabled: true, note: 'Access required' }
+  ];
 
   const isHome = pathname === '/home';
   const isProfileWorkspace = PROFILE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -61,7 +68,7 @@ export default function Sidebar() {
     ? PROFILE_NAV_ITEMS
     : mode === 'admin'
       ? ADMIN_NAV_ITEMS
-      : HOME_NAV_ITEMS;
+      : homeNavItems;
 
   const handleLogout = () => {
     logout();

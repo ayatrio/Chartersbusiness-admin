@@ -1,8 +1,27 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+const HOSTED_API_BASE_URL = 'https://charters-business-admin.onrender.com/api';
+const LOCAL_API_BASE_URL = 'http://localhost:5000/api';
+
+const resolveApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hostname = String(window.location?.hostname || '').toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return LOCAL_API_BASE_URL;
+    }
+  }
+
+  const configuredBaseUrl = String(process.env.REACT_APP_API_URL || '').trim();
+  if (configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/$/, '');
+  }
+
+  return HOSTED_API_BASE_URL;
+};
+
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: resolveApiBaseUrl(),
   timeout: 30000
 });
 
@@ -96,6 +115,34 @@ export const aiService = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   }
+};
+
+export const aiInterviewService = {
+  getHealth: () => requestWithFallback(
+    [
+      () => api.get('/ai-interview/health'),
+      () => api.get('/interview/health')
+    ],
+    'AI interview health endpoint is not available on this backend.'
+  ),
+
+  getToken: (roomId) => requestWithFallback(
+    [
+      () => api.get('/ai-interview/token', { params: { roomId } }),
+      () => api.get('/interview/token', { params: { roomId } }),
+      () => api.post('/ai-interview/token', { roomId }),
+      () => api.post('/interview/token', { roomId })
+    ],
+    'AI interview token endpoint is not available on this backend.'
+  ),
+
+  scoreLanguage: (text) => requestWithFallback(
+    [
+      () => api.post('/ai-interview/score-language', { text }),
+      () => api.post('/interview/score-language', { text })
+    ],
+    'AI interview language scoring endpoint is not available on this backend.'
+  )
 };
 
 const isNotFound = (error) => error?.response?.status === 404;

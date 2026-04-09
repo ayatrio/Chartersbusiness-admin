@@ -4,22 +4,89 @@ const jwt = require('jsonwebtoken');
 
 const RETRYABLE_METHODS = new Set(['get', 'head', 'options']);
 const ALLOWED_ACTING_ROLES = new Set(['admin', 'recruiter']);
+const HOSTED_CHARTERS_BASE_URL = 'https://charters-business-admin.onrender.com';
+const LOCAL_CHARTERS_BASE_URL = 'http://localhost:5000';
+const DEFAULT_LOGIN_PATHS = ['/api/v1/auth/login', '/api/auth/login'];
 
 const normalizeBaseUrl = (rawUrl) => {
-  const value = (rawUrl || 'http://localhost:5000').trim();
+  const value = String(rawUrl || '').trim();
   return value.replace(/\/$/, '');
 };
+
+const getDefaultChartersBaseUrl = () => (
+  process.env.NODE_ENV === 'production'
+    ? HOSTED_CHARTERS_BASE_URL
+    : LOCAL_CHARTERS_BASE_URL
+);
 
 const normalizeTimeout = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+const isLocalRuntime = () => process.env.NODE_ENV !== 'production';
+
 const REQUEST_TIMEOUT_MS = normalizeTimeout(process.env.CHARTERS_API_TIMEOUT_MS, 5000);
 const RETRY_COUNT = normalizeTimeout(process.env.CHARTERS_API_RETRY_COUNT, 2);
 const RETRY_BASE_DELAY_MS = normalizeTimeout(process.env.CHARTERS_API_RETRY_DELAY_MS, 200);
+const LOGIN_RETRY_COUNT = normalizeTimeout(process.env.CHARTERS_LOGIN_RETRY_COUNT, 1);
 
-const getChartersBaseUrl = () => normalizeBaseUrl(process.env.CHARTERS_API_URL);
+const withTunnelPriorityForLocal = (urls) => {
+  const unique = Array.from(new Set((urls || []).filter(Boolean)));
+  const tunnelUrl = normalizeBaseUrl(process.env.CHARTERS_API_TUNNEL_URL);
+
+  if (!isLocalRuntime() || !tunnelUrl) {
+    return unique;
+  }
+
+  const withoutTunnel = unique.filter((url) => url !== tunnelUrl);
+  return [tunnelUrl, ...withoutTunnel];
+};
+
+const getChartersBaseUrl = () => {
+  const configuredBaseUrls = withTunnelPriorityForLocal(parseCsvValues(process.env.CHARTERS_API_URLS)
+    .map((url) => normalizeBaseUrl(url))
+    .filter(Boolean));
+
+  if (configuredBaseUrls.length > 0) {
+    return configuredBaseUrls[0];
+  }
+
+  const tunnelUrl = normalizeBaseUrl(process.env.CHARTERS_API_TUNNEL_URL);
+  if (isLocalRuntime() && tunnelUrl) {
+    return tunnelUrl;
+  }
+
+  const configuredBaseUrl = normalizeBaseUrl(process.env.CHARTERS_API_URL);
+  if (configuredBaseUrl) {
+    return configuredBaseUrl;
+  }
+
+  return normalizeBaseUrl(getDefaultChartersBaseUrl());
+};
+
+const getChartersBaseUrls = () => {
+  return withTunnelPriorityForLocal([
+    ...parseCsvValues(process.env.CHARTERS_API_URLS),
+    process.env.CHARTERS_API_URL,
+    process.env.CHARTERS_API_TUNNEL_URL,
+    getDefaultChartersBaseUrl(),
+  ]
+    .map((url) => normalizeBaseUrl(url))
+    .filter(Boolean));
+};
+
+const getLoginPaths = () => {
+  const configuredPaths = parseCsvValues(process.env.CHARTERS_ADMIN_LOGIN_PATHS)
+    .map((path) => `/${String(path || '').trim().replace(/^\/+/, '')}`)
+    .filter((path) => path !== '/');
+
+  if (configuredPaths.length > 0) {
+    return Array.from(new Set(configuredPaths));
+  }
+
+  return DEFAULT_LOGIN_PATHS;
+};
 
 const parseCsvValues = (value) => String(value || '')
   .split(',')
@@ -114,7 +181,7 @@ const normalizeCandidatesPayload = (payload) => {
 };
 
 const toServiceError = (error, fallbackMessage) => {
-  const status = error?.response?.status || 500;
+  const status = error?.status || error?.response?.status || 500;
   const message =
     error?.response?.data?.message ||
     error?.message ||
@@ -123,6 +190,8 @@ const toServiceError = (error, fallbackMessage) => {
   const serviceError = new Error(message);
   serviceError.status = status;
   serviceError.details = error?.response?.data || null;
+  serviceError.code = error?.code || error?.response?.data?.code || null;
+  serviceError.isNetworkError = !error?.response;
   return serviceError;
 };
 
@@ -186,7 +255,7 @@ const createActingAdminToken = (actorContext) => {
   );
 };
 
-const createClient = (actorContext, includeServiceHeaders = true) => {
+const createClient = (actorContext, includeServiceHeaders = true, baseURL = getChartersBaseUrl()) => {
   const context = normalizeActorContext(actorContext);
 
   const headers = {
@@ -205,7 +274,7 @@ const createClient = (actorContext, includeServiceHeaders = true) => {
   }
 
   return axios.create({
-    baseURL: getChartersBaseUrl(),
+    baseURL,
     timeout: REQUEST_TIMEOUT_MS,
     headers,
   });
@@ -237,32 +306,66 @@ const requestWithRetry = async (client, method, url, requestConfig = {}) => {
 
 const chartersAdminService = {
   async loginAdmin(email, password, requestContext = {}) {
-    try {
-      const client = createClient(requestContext, false);
-      const response = await requestWithRetry(client, 'post', '/api/v1/auth/login', {
-        data: { email, password },
-      });
+    const baseUrls = getChartersBaseUrls();
+    const loginPaths = getLoginPaths();
+    let lastError = null;
 
-      const payload = extractPayload(response) || {};
-      const user = payload.user || response?.data?.user;
+    for (const baseURL of baseUrls) {
+      const client = createClient(requestContext, false, baseURL);
 
-      if (!user || !user.id) {
-        throw new Error('Invalid login response from Charters');
+      for (const loginPath of loginPaths) {
+        let retryAttempt = 0;
+
+        while (true) {
+          try {
+            const response = await client.request({
+              method: 'post',
+              url: loginPath,
+              data: { email, password },
+            });
+
+            const payload = extractPayload(response) || {};
+            const user = payload.user || response?.data?.user;
+
+            if (!user || !user.id) {
+              throw new Error('Invalid login response from Charters');
+            }
+
+            if (!ALLOWED_ACTING_ROLES.has(String(user.role || '').toLowerCase())) {
+              const forbidden = new Error('Admin access required');
+              forbidden.status = 403;
+              throw forbidden;
+            }
+
+            return {
+              user,
+              token: payload.token || response?.data?.token || null,
+            };
+          } catch (error) {
+            lastError = error;
+            const status = error?.response?.status;
+            const noResponse = !error?.response;
+            const canRetryCurrentTarget =
+              (noResponse || status === 429 || status >= 500) &&
+              retryAttempt < LOGIN_RETRY_COUNT;
+
+            if (canRetryCurrentTarget) {
+              retryAttempt += 1;
+              await sleep(RETRY_BASE_DELAY_MS * retryAttempt);
+              continue;
+            }
+
+            if (status === 404 || noResponse || status >= 500) {
+              break;
+            }
+
+            throw toServiceError(error, 'Failed to validate admin credentials with Charters');
+          }
+        }
       }
-
-      if (!ALLOWED_ACTING_ROLES.has(String(user.role || '').toLowerCase())) {
-        const forbidden = new Error('Admin access required');
-        forbidden.status = 403;
-        throw forbidden;
-      }
-
-      return {
-        user,
-        token: payload.token || response?.data?.token || null,
-      };
-    } catch (error) {
-      throw toServiceError(error, 'Failed to validate admin credentials with Charters');
     }
+
+    throw toServiceError(lastError || new Error('Upstream login service unavailable'), 'Failed to validate admin credentials with Charters');
   },
 
   async getCandidates(actorContext, params = {}) {

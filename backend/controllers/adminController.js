@@ -7,6 +7,53 @@ const chartersAdminService = require('../services/chartersAdminService');
 const { cloneDefaultPermissions } = require('../utils/defaultPermissions');
 
 const getSafeNumber = (value) => (Number.isFinite(value) ? value : 0);
+const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const NETWORK_FALLBACK_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'ECONNABORTED',
+  'ECONNRESET',
+]);
+
+const readBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return fallback;
+  }
+
+  return TRUE_VALUES.has(String(value).trim().toLowerCase());
+};
+
+const isLocalFallbackEnabled = () => readBoolean(
+  process.env.CHARTERS_LOCAL_FALLBACK,
+  process.env.NODE_ENV !== 'production'
+);
+
+const shouldFallbackToLocal = (error) => {
+  if (!isLocalFallbackEnabled()) return false;
+
+  const status = error?.status || error?.response?.status || null;
+  const code = String(error?.code || '').toUpperCase();
+  const message = String(
+    error?.message ||
+    error?.response?.data?.message ||
+    ''
+  ).toLowerCase();
+
+  if (error?.isNetworkError || NETWORK_FALLBACK_CODES.has(code)) {
+    return true;
+  }
+
+  if (status === 404 || status === 502 || status === 503 || status === 504) {
+    return true;
+  }
+
+  return (
+    message.includes('route not found') ||
+    message.includes('upstream') ||
+    message.includes('service unavailable')
+  );
+};
 
 const mapProfileScores = (profile) => {
   if (!profile) return null;
@@ -48,6 +95,90 @@ const deepMerge = (target, source) => {
   });
 
   return output;
+};
+
+const mapLocalUserRole = (role) => (
+  String(role || '').toLowerCase() === 'admin' ? 'admin' : 'candidate'
+);
+
+const mapLocalUserStatus = (isActive, accessStatus) => {
+  if (accessStatus) return accessStatus;
+  return isActive === false ? 'disabled' : 'active';
+};
+
+const toLocalCandidateShape = (userDoc) => {
+  if (!userDoc) return null;
+
+  const firstName = userDoc.firstName || '';
+  const lastName = userDoc.lastName || '';
+  const fullName = `${firstName} ${lastName}`.trim();
+  const role = mapLocalUserRole(userDoc.role);
+  const status = userDoc.isActive === false ? 'disabled' : 'active';
+
+  return {
+    _id: String(userDoc._id),
+    id: String(userDoc._id),
+    chartersUserId: String(userDoc._id),
+    name: fullName || null,
+    firstName,
+    lastName,
+    email: userDoc.email || null,
+    phoneNumber: userDoc.phone || null,
+    courseInterestedIn: userDoc.selectedCourse || null,
+    role,
+    status,
+    isActive: status === 'active',
+    createdAt: userDoc.createdAt || null,
+    updatedAt: userDoc.updatedAt || null,
+    lastLogin: userDoc.lastLogin || null,
+  };
+};
+
+const getLocalUsersForAdmin = async () => {
+  const users = await User.find({})
+    .select('email firstName lastName phone selectedCourse role permissions permissionsVersion isActive createdAt updatedAt lastLogin');
+
+  if (!users.length) return [];
+
+  const userIds = users.map((entry) => entry._id);
+  const chartersIds = userIds.map((id) => String(id));
+
+  const [profiles, accessEntries] = await Promise.all([
+    ProfileBranding.find({ userId: { $in: userIds } }).select('userId scores lastCalculated'),
+    CandidateAccess.find({ chartersUserId: { $in: chartersIds } }),
+  ]);
+
+  const profileMap = new Map(profiles.map((profile) => [String(profile.userId), profile]));
+  const accessMap = new Map(accessEntries.map((access) => [access.chartersUserId, access]));
+
+  return users.map((userDoc) => {
+    const chartersUserId = String(userDoc._id);
+    const access = accessMap.get(chartersUserId) || null;
+    const profile = profileMap.get(chartersUserId) || null;
+    const baseCandidate = toLocalCandidateShape(userDoc);
+    const status = mapLocalUserStatus(userDoc.isActive, access?.status);
+    const defaultPermissions = deepMerge(cloneDefaultPermissions(), userDoc.permissions || {});
+    const mergedPermissions = deepMerge(defaultPermissions, access?.permissions || {});
+
+    return {
+      _id: chartersUserId,
+      chartersUserId,
+      pbUserId: chartersUserId,
+      name: baseCandidate.name,
+      firstName: baseCandidate.firstName,
+      lastName: baseCandidate.lastName,
+      email: baseCandidate.email,
+      phone: baseCandidate.phoneNumber,
+      role: baseCandidate.role,
+      status,
+      isActive: status === 'active',
+      permissions: mergedPermissions,
+      profileScores: mapProfileScores(profile),
+      createdAt: baseCandidate.createdAt,
+      updatedAt: baseCandidate.updatedAt,
+      lastLogin: baseCandidate.lastLogin,
+    };
+  });
 };
 
 const getServiceActor = (req) => ({
@@ -166,7 +297,27 @@ const shapeAdminUser = ({ candidate, link, access, profile }) => {
 
 exports.getUsers = async (req, res, next) => {
   try {
-    const payload = await chartersAdminService.getCandidates(getServiceActor(req), req.query || {});
+    let payload;
+    try {
+      payload = await chartersAdminService.getCandidates(getServiceActor(req), req.query || {});
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      const users = await getLocalUsersForAdmin();
+      return res.status(200).json({
+        success: true,
+        users,
+        pagination: {
+          total: users.length,
+          page: 1,
+          limit: users.length,
+        },
+        source: 'local-fallback',
+      });
+    }
+
     const candidates = payload.candidates || [];
     const chartersIds = candidates.map((candidate) => String(candidate._id)).filter(Boolean);
 
@@ -219,7 +370,29 @@ exports.updatePermissions = async (req, res, next) => {
       });
     }
 
-    const candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
+    let candidate;
+    let usedLocalFallback = false;
+
+    try {
+      candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      const localUser = await User.findById(chartersUserId)
+        .select('email firstName lastName phone selectedCourse role permissions permissionsVersion isActive createdAt updatedAt lastLogin');
+
+      if (!localUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Candidate not found',
+        });
+      }
+
+      candidate = toLocalCandidateShape(localUser);
+      usedLocalFallback = true;
+    }
 
     const existing = await CandidateAccess.findOne({ chartersUserId });
     const beforePermissions = deepMerge(cloneDefaultPermissions(), existing?.permissions || {});
@@ -240,6 +413,15 @@ exports.updatePermissions = async (req, res, next) => {
         new: true,
       }
     );
+
+    if (usedLocalFallback) {
+      const localUser = await User.findById(chartersUserId).select('permissions permissionsVersion');
+      if (localUser) {
+        localUser.permissions = deepMerge(cloneDefaultPermissions(), mergedPermissions);
+        localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
+        await localUser.save();
+      }
+    }
 
     await writeAuditLog({
       req,
@@ -278,10 +460,38 @@ exports.deleteCandidate = async (req, res, next) => {
 
     const previousAccess = await CandidateAccess.findOne({ chartersUserId }).lean();
 
-    await chartersAdminService.deactivateCandidate(
-      getServiceActor(req),
-      chartersUserId
-    );
+    let usedLocalFallback = false;
+
+    try {
+      await chartersAdminService.deactivateCandidate(
+        getServiceActor(req),
+        chartersUserId
+      );
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      const localUser = await User.findById(chartersUserId).select('role isActive permissionsVersion');
+      if (!localUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Candidate not found',
+        });
+      }
+
+      if (mapLocalUserRole(localUser.role) === 'admin') {
+        return res.status(400).json({
+          success: false,
+          message: 'Admin accounts cannot be removed',
+        });
+      }
+
+      localUser.isActive = false;
+      localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
+      await localUser.save();
+      usedLocalFallback = true;
+    }
 
     await CandidateAccess.findOneAndUpdate(
       { chartersUserId },
@@ -307,7 +517,7 @@ exports.deleteCandidate = async (req, res, next) => {
       action: 'candidate.deactivated',
       targetChartersUserId: chartersUserId,
       before: previousAccess ? { status: previousAccess.status } : null,
-      after: { status: 'disabled' },
+      after: { status: 'disabled', source: usedLocalFallback ? 'local-fallback' : 'charters' },
     });
 
     res.status(200).json({
@@ -323,10 +533,23 @@ exports.getPermissions = async (req, res, next) => {
   try {
     const { chartersUserId } = req.params;
 
-    const [access, candidate] = await Promise.all([
-      CandidateAccess.findOne({ chartersUserId }).lean(),
-      chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId),
-    ]);
+    const access = await CandidateAccess.findOne({ chartersUserId }).lean();
+
+    let candidate = null;
+    try {
+      candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      const localUser = await User.findById(chartersUserId).select('isActive');
+      if (localUser) {
+        candidate = {
+          status: localUser.isActive === false ? 'disabled' : 'active',
+        };
+      }
+    }
 
     res.status(200).json({
       success: true,

@@ -40,8 +40,24 @@ const loadRouteModule = (label, path) => {
 
 const profileBrandingRoutes = loadRouteModule('profileBranding', './routes/profileBranding');
 const aiServicesRoutes = loadRouteModule('aiServices', './routes/aiServices');
+const aiInterviewRoutes = loadRouteModule('aiInterview', './routes/aiInterview');
 
 const app = express();
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://charters-business-admin.vercel.app',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+
+const parseAllowedOrigins = (value) => String(value || '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean);
+
+const configuredOrigins = parseAllowedOrigins(process.env.FRONTEND_URL);
+const allowedOrigins = Array.from(
+  new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins])
+);
 
 // Establish the database connection before serving requests.
 connectDB();
@@ -86,7 +102,13 @@ app.use('/api/', limiter);
 // CORS Configuration
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   })
 );
@@ -100,6 +122,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/profile-branding', profileBrandingRoutes);
 app.use('/api/ai-services', aiServicesRoutes);
+app.use('/api/ai-interview', aiInterviewRoutes);
+app.use('/api/interview', aiInterviewRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/permissions', permissionsRoutes);
 app.use('/api/internal/permissions', internalPermissionsRoutes);

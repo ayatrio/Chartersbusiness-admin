@@ -15,6 +15,7 @@ import WebsitePage     from './pages/WebsitePage';
 import CredentialsPage from './pages/CredentialsPage';
 import NetworkingPage  from './pages/NetworkingPage';
 import AIToolsPage     from './pages/AIToolsPage';
+import AIInterviewPage from './pages/AIInterviewPage';
 import AdminPage       from './pages/AdminPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminJobsPage from './pages/admin/AdminJobsPage';
@@ -106,6 +107,8 @@ function AppRoutes() {
       <Route path="/credentials" element={<ProtectedRoute><CredentialsPage /></ProtectedRoute>} />
       <Route path="/networking" element={<ProtectedRoute><NetworkingPage /></ProtectedRoute>} />
       <Route path="/ai-tools" element={<ProtectedRoute><AIToolsPage /></ProtectedRoute>} />
+      <Route path="/ai-interview" element={<ProtectedRoute><AIInterviewPage /></ProtectedRoute>} />
+      <Route path="/ai-interview/:id" element={<ProtectedRoute><AIInterviewPage /></ProtectedRoute>} />
 
       {/* 🔥 ADMIN */}
       <Route
