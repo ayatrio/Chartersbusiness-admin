@@ -13,12 +13,26 @@ const gradeMeta = (score) => {
 };
 
 const clampScore = (value) => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+const toLabel = (value) => String(value || '')
+  .replace(/([A-Z])/g, ' $1')
+  .replace(/[_-]+/g, ' ')
+  .trim()
+  .replace(/^./, (char) => char.toUpperCase());
+const toBreakdownList = (value) => Object.entries(value || {})
+  .map(([key, score]) => ({
+    key,
+    label: toLabel(key),
+    score: clampScore(score),
+  }));
 
 export default function ScoreReport({ scores, duration, onRestart }) {
   const overall = clampScore(scores?.overall);
   const grade = gradeMeta(overall);
   const transcript = Array.isArray(scores?.transcript) ? scores.transcript : [];
   const languageSnapshots = Array.isArray(scores?.languageSnapshots) ? scores.languageSnapshots : [];
+  const contentScore = clampScore(scores?.content ?? scores?.language);
+  const bodyScore = clampScore(scores?.body);
+  const voiceScore = clampScore(scores?.voice);
 
   const fillers = languageSnapshots.reduce(
     (sum, entry) => sum + Math.max(0, Math.round(Number(entry?.fillers || 0))),
@@ -28,51 +42,42 @@ export default function ScoreReport({ scores, duration, onRestart }) {
 
   const metrics = [
     {
-      key: 'language',
-      label: 'Language & grammar',
-      value: clampScore(scores?.language),
-      weight: '35%',
+      key: 'content',
+      label: 'Content / answers',
+      value: contentScore,
+      weight: '50 pts',
       color: 'var(--accent)',
+      subscores: toBreakdownList(scores?.breakdown?.content),
       tips: [
-        'Use STAR-style structure for behavioral responses.',
-        'Cut filler words and keep sentences concise.',
-        'Support answers with one measurable outcome.',
+        'Answer the exact question before adding extra context.',
+        'Use STAR structure and close with concrete results.',
+        'Back points with metrics, outcomes, and specific examples.',
       ],
     },
     {
       key: 'body',
       label: 'Body language',
-      value: clampScore(scores?.body),
-      weight: '30%',
+      value: bodyScore,
+      weight: '25 pts',
       color: 'var(--navy)',
+      subscores: toBreakdownList(scores?.breakdown?.body),
       tips: [
-        'Keep natural eye contact with the camera.',
-        'Use a stable posture and avoid restless movement.',
-        'Pause briefly before complex responses.',
+        'Maintain steady camera eye contact and open posture.',
+        'Keep gestures natural and avoid repetitive fidgeting.',
+        'Focus on settling into a calm rhythm as the round progresses.',
       ],
     },
     {
       key: 'voice',
-      label: 'Voice tone',
-      value: clampScore(scores?.voice),
-      weight: '20%',
+      label: 'Voice & speech',
+      value: voiceScore,
+      weight: '15 pts',
       color: 'var(--green)',
+      subscores: toBreakdownList(scores?.breakdown?.voice),
       tips: [
-        'Maintain an even pace and clear articulation.',
-        'Avoid speaking too softly in long answers.',
-        'Vary emphasis on important points.',
-      ],
-    },
-    {
-      key: 'technical',
-      label: 'Technical depth',
-      value: clampScore(scores?.technical),
-      weight: '15%',
-      color: 'var(--gold)',
-      tips: [
-        'Explain how and why, not just what you did.',
-        'Highlight constraints and trade-offs.',
-        'Mention real tools and decision criteria.',
+        'Aim for a steady pace and clean articulation.',
+        'Use professional vocabulary and reduce filler words.',
+        'Keep confidence in tone while avoiding a rushed delivery.',
       ],
     },
   ];
@@ -85,7 +90,7 @@ export default function ScoreReport({ scores, duration, onRestart }) {
             <p className="ai-report-eyebrow">Interview Complete</p>
             <h3 className="ai-report-title">Performance Summary</h3>
             <p className="ai-report-subtitle">
-              Duration: {duration} - {answerCount} answers - Filler words: {fillers}
+              Duration: {duration} - {answerCount} answers - Filler words: {fillers} - Rubric: 50/25/15 points (normalized)
             </p>
           </div>
           <div className="ai-report-actions">
@@ -130,10 +135,9 @@ export default function ScoreReport({ scores, duration, onRestart }) {
             </p>
 
             <div className="ai-report-stat-row">
-              <Stat label="Language" value={`${clampScore(scores?.language)}/100`} />
-              <Stat label="Body" value={`${clampScore(scores?.body)}/100`} />
-              <Stat label="Voice" value={`${clampScore(scores?.voice)}/100`} />
-              <Stat label="Technical" value={`${clampScore(scores?.technical)}/100`} />
+              <Stat label="Content" value={`${contentScore}/100`} />
+              <Stat label="Body" value={`${bodyScore}/100`} />
+              <Stat label="Voice" value={`${voiceScore}/100`} />
             </div>
           </div>
         </Card>
@@ -170,6 +174,16 @@ export default function ScoreReport({ scores, duration, onRestart }) {
               <p style={{ fontSize: 12, fontWeight: 700, color: band.color, marginBottom: 8 }}>
                 {band.label}
               </p>
+
+              {metric.subscores.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  {metric.subscores.map((subscore) => (
+                    <p key={subscore.key} style={{ margin: '0 0 3px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {subscore.label}: <strong>{subscore.score}</strong>
+                    </p>
+                  ))}
+                </div>
+              )}
 
               <ul style={{
                 margin: 0,

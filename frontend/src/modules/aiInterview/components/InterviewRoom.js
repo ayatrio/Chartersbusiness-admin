@@ -32,15 +32,6 @@ const FALLBACK_FOLLOWUPS = [
 
 const clampPercent = (value) => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 
-const getAverage = (entries, key) => {
-  if (!Array.isArray(entries) || !entries.length) {
-    return 0;
-  }
-
-  const sum = entries.reduce((total, entry) => total + Number(entry?.[key] || 0), 0);
-  return sum / entries.length;
-};
-
 export default function InterviewRoom({
   interviewId,
   durationLabel,
@@ -326,15 +317,11 @@ export default function InterviewRoom({
 
       stopLocalPreview();
 
-      const averageLanguage = languageSnapshots.length
-        ? Math.round(getAverage(languageSnapshots, 'overall'))
-        : clampPercent(liveScore.language || 50);
-      const technicalScore = clampPercent(averageLanguage * 0.82 + 12);
       const finalScore = calculateFinalScore({
+        transcript,
         languageSnapshots,
         bodySnapshots,
         voiceScore: liveScore.voice || 72,
-        technicalScore,
       });
 
       onEnd({
@@ -407,7 +394,7 @@ export default function InterviewRoom({
 
           <div style={{ padding: 16 }}>
             <h4 style={sectionTitleStyle}>Live Score Signals</h4>
-            <ScoreMeter label="Language" value={liveScore.language} color="var(--accent)" />
+            <ScoreMeter label="Content answers" value={liveScore.language || 50} color="var(--accent)" />
             <ScoreMeter label="Body language" value={liveScore.body} color="var(--navy)" />
             <ScoreMeter label="Voice tone" value={liveScore.voice || 72} color="var(--green)" />
           </div>
