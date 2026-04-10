@@ -87,6 +87,30 @@ const isAllowedOrigin = (origin) => {
   return allowedOriginPatterns.some((pattern) => pattern.test(origin));
 };
 
+const parseTrustProxy = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return process.env.NODE_ENV === 'production' ? 1 : false;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return 1;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  const parsed = Number.parseInt(normalized, 10);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+
+  return value;
+};
+
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
+
 // Establish the database connection before serving requests.
 connectDB();
 
@@ -120,11 +144,23 @@ app.use((req, res, next) => {
 });
 
 // Rate Limiting
+const loginLimiter = rateLimit({
+  windowMs: parseInt(process.env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
+  max: parseInt(process.env.ADMIN_LOGIN_RATE_LIMIT_MAX_REQUESTS, 10) || 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many login attempts. Please try again later.',
+});
+
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/health',
   message: 'Too many requests from this IP, please try again later.',
 });
+app.use('/api/admin/auth/login', loginLimiter);
 app.use('/api/', limiter);
 
 // CORS Configuration
