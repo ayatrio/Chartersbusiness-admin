@@ -17,13 +17,14 @@
     "framer-motion": "^10.16.16",
     "livekit-client": "^2.15.4",
     "date-fns": "^3.0.6",
-    "jwt-decode": "^4.0.0"
+    "jwt-decode": "^4.0.0",
+    "react-app-rewired": "^2.2.1"
   },
   "scripts": {
-    "dev": "react-scripts start",
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
+    "dev": "react-app-rewired start",
+    "start": "react-app-rewired start",
+    "build": "react-app-rewired build",
+    "test": "react-app-rewired test",
     "eject": "react-scripts eject"
   },
   "browserslist": {
