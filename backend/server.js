@@ -142,6 +142,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Root route for platform health checks
+app.get('/', (req, res) => {
+  res.status(200).send('API is running');
+});
+
 // Error Handling Middleware
 app.use((err, req, res, next) => {
   const statusCode = err.status || 500;
