@@ -48,16 +48,44 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ];
+const DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
+  /^https:\/\/charters-business-admin-[a-z0-9-]+\.vercel\.app$/i,
+];
 
 const parseAllowedOrigins = (value) => String(value || '')
   .split(',')
   .map((entry) => entry.trim())
   .filter(Boolean);
 
+const parseAllowedOriginRegexes = (value) => {
+  const entries = parseAllowedOrigins(value);
+  const regexes = [];
+
+  for (const entry of entries) {
+    try {
+      regexes.push(new RegExp(entry));
+    } catch (error) {
+      console.warn(`Ignoring invalid FRONTEND_URL_REGEX pattern: ${entry}`);
+    }
+  }
+
+  return regexes;
+};
+
 const configuredOrigins = parseAllowedOrigins(process.env.FRONTEND_URL);
 const allowedOrigins = Array.from(
   new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins])
 );
+const configuredOriginPatterns = parseAllowedOriginRegexes(process.env.FRONTEND_URL_REGEX);
+const allowedOriginPatterns = [...DEFAULT_ALLOWED_ORIGIN_PATTERNS, ...configuredOriginPatterns];
+
+const isAllowedOrigin = (origin) => {
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+
+  return allowedOriginPatterns.some((pattern) => pattern.test(origin));
+};
 
 // Establish the database connection before serving requests.
 connectDB();
@@ -103,7 +131,7 @@ app.use('/api/', limiter);
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || isAllowedOrigin(origin)) {
         return callback(null, true);
       }
 
