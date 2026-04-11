@@ -193,6 +193,7 @@ app.get('/', (req, res) => {
 // Error Handling Middleware
 app.use((err, req, res, next) => {
   const statusCode = err.status || 500;
+  const upstream = err.upstream || {};
   const payload = {
     level: 'error',
     type: 'request_error',
@@ -200,6 +201,11 @@ app.use((err, req, res, next) => {
     method: req.method,
     path: req.originalUrl,
     statusCode,
+    code: err.code || null,
+    upstreamStatus: upstream.status || null,
+    upstreamMethod: upstream.method || null,
+    upstreamUrl: upstream.url || null,
+    upstreamRetryAfter: upstream.retryAfter || null,
     message: err.message || 'Internal Server Error',
     timestamp: new Date().toISOString(),
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
@@ -210,6 +216,8 @@ app.use((err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     requestId: req.requestId || null,
+    ...(err.code ? { code: err.code } : {}),
+    ...(upstream.retryAfter ? { retryAfterSeconds: upstream.retryAfter } : {}),
     message: err.message || 'Internal Server Error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
