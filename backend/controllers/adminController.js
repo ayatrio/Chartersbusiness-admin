@@ -3,8 +3,6 @@ const ProfileBranding = require('../models/ProfileBranding');
 const CandidateLink = require('../models/CandidateLink');
 const CandidateAccess = require('../models/CandidateAccess');
 const AuditLog = require('../models/AuditLog');
-const JobPosting = require('../models/JobPosting.model');
-const InternshipPosting = require('../models/InternshipPosting.model');
 const chartersAdminService = require('../services/chartersAdminService');
 const { cloneDefaultPermissions } = require('../utils/defaultPermissions');
 
@@ -46,16 +44,14 @@ const shouldFallbackToLocal = (error) => {
     return true;
   }
 
-  // 429 means the upstream rate window is exhausted — serve local data instead.
-  if (status === 429 || status === 404 || status === 502 || status === 503 || status === 504) {
+  if (status === 404 || status === 502 || status === 503 || status === 504) {
     return true;
   }
 
   return (
     message.includes('route not found') ||
     message.includes('upstream') ||
-    message.includes('service unavailable') ||
-    message.includes('rate-limited')
+    message.includes('service unavailable')
   );
 };
 
@@ -563,33 +559,14 @@ exports.getPermissions = async (req, res, next) => {
   }
 };
 
-// ─── Jobs — local-first, upstream fallback ───────────────────────────────────
-
 exports.getJobs = async (req, res, next) => {
   try {
-    const {
-      page = 1, limit = 20, search, location, category, jobType,
-    } = req.query || {};
+    const payload = await chartersAdminService.getJobs(getServiceActor(req), req.query || {});
 
-    const query = {};
-    if (location && location !== 'All') query.location = location;
-    if (category) query.category = category;
-    if (jobType) query.jobType = jobType;
-    if (search) query.$text = { $search: search };
-
-    const [jobs, total] = await Promise.all([
-      JobPosting.find(query)
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .skip((parseInt(page) - 1) * parseInt(limit))
-        .lean(),
-      JobPosting.countDocuments(query),
-    ]);
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      jobPostings: jobs,
-      pagination: { total, page: parseInt(page), limit: parseInt(limit) },
+      jobPostings: payload.jobs || [],
+      pagination: payload.pagination || null,
     });
   } catch (error) {
     next(error);
@@ -598,11 +575,12 @@ exports.getJobs = async (req, res, next) => {
 
 exports.getJobById = async (req, res, next) => {
   try {
-    const jobPosting = await JobPosting.findById(req.params.id).lean();
-    if (!jobPosting) {
-      return res.status(404).json({ success: false, message: 'Job posting not found' });
-    }
-    return res.status(200).json({ success: true, jobPosting });
+    const jobPosting = await chartersAdminService.getJobById(getServiceActor(req), req.params.id);
+
+    res.status(200).json({
+      success: true,
+      jobPosting,
+    });
   } catch (error) {
     next(error);
   }
@@ -610,35 +588,20 @@ exports.getJobById = async (req, res, next) => {
 
 exports.createJob = async (req, res, next) => {
   try {
-    const actorId = req.user?.chartersUserId || String(req.user?._id || '');
-    const {
-      title, company, location, jobType, category, salary, experience, description,
-    } = req.body || {};
-
-    if (!title || !location || !jobType || !category || !salary || !experience || !description) {
-      return res.status(400).json({ success: false, message: 'All fields are required' });
-    }
-
-    const jobPosting = await JobPosting.create({
-      title: title.trim(),
-      company: company?.trim() || 'Charters Business',
-      location: location.trim(),
-      jobType,
-      category: category.trim(),
-      salary: salary.trim(),
-      experience: experience.trim(),
-      description,
-      createdBy: actorId,
-    });
+    const jobPosting = await chartersAdminService.createJob(getServiceActor(req), req.body || {});
 
     await writeAuditLog({
       req,
       actionType: 'JOB_CREATE',
       action: 'job.created',
-      after: { jobId: jobPosting._id },
+      targetChartersUserId: null,
+      after: { jobId: jobPosting?._id || null },
     });
 
-    return res.status(201).json({ success: true, jobPosting });
+    res.status(201).json({
+      success: true,
+      jobPosting,
+    });
   } catch (error) {
     next(error);
   }
@@ -646,31 +609,19 @@ exports.createJob = async (req, res, next) => {
 
 exports.updateJob = async (req, res, next) => {
   try {
-    const allowedFields = [
-      'title', 'company', 'location', 'jobType',
-      'category', 'salary', 'experience', 'description', 'isActive',
-    ];
-    const updates = {};
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
-    });
-
-    const jobPosting = await JobPosting.findByIdAndUpdate(
-      req.params.id, updates, { new: true, runValidators: true }
-    ).lean();
-
-    if (!jobPosting) {
-      return res.status(404).json({ success: false, message: 'Job posting not found' });
-    }
+    const jobPosting = await chartersAdminService.updateJob(getServiceActor(req), req.params.id, req.body || {});
 
     await writeAuditLog({
       req,
       actionType: 'JOB_UPDATE',
       action: 'job.updated',
-      after: { jobId: jobPosting._id },
+      after: { jobId: jobPosting?._id || req.params.id },
     });
 
-    return res.status(200).json({ success: true, jobPosting });
+    res.status(200).json({
+      success: true,
+      jobPosting,
+    });
   } catch (error) {
     next(error);
   }
@@ -678,13 +629,7 @@ exports.updateJob = async (req, res, next) => {
 
 exports.deleteJob = async (req, res, next) => {
   try {
-    const jobPosting = await JobPosting.findByIdAndUpdate(
-      req.params.id, { isActive: false }, { new: true }
-    );
-
-    if (!jobPosting) {
-      return res.status(404).json({ success: false, message: 'Job posting not found' });
-    }
+    await chartersAdminService.deleteJob(getServiceActor(req), req.params.id);
 
     await writeAuditLog({
       req,
@@ -693,7 +638,10 @@ exports.deleteJob = async (req, res, next) => {
       after: { jobId: req.params.id },
     });
 
-    return res.status(200).json({ success: true, message: 'Job removed successfully' });
+    res.status(200).json({
+      success: true,
+      message: 'Job removed successfully',
+    });
   } catch (error) {
     next(error);
   }
@@ -701,51 +649,30 @@ exports.deleteJob = async (req, res, next) => {
 
 exports.getApplicationsForJob = async (req, res, next) => {
   try {
-    // Applications are stored upstream; attempt that. No local model exists for them.
     const payload = await chartersAdminService.getApplicationsForJob(
-      getServiceActor(req), req.params.id, req.query || {}
+      getServiceActor(req),
+      req.params.id,
+      req.query || {}
     );
-    return res.status(200).json({
+
+    res.status(200).json({
       success: true,
       applications: payload.applications || [],
       pagination: payload.pagination || null,
     });
   } catch (error) {
-    // Graceful degradation — return empty rather than crashing the page.
-    if (shouldFallbackToLocal(error)) {
-      return res.status(200).json({ success: true, applications: [], pagination: null, source: 'local-fallback' });
-    }
     next(error);
   }
 };
 
-// ─── Internships — local-first ────────────────────────────────────────────────
-
 exports.getInternships = async (req, res, next) => {
   try {
-    const {
-      page = 1, limit = 20, search, location, category, internshipType,
-    } = req.query || {};
+    const payload = await chartersAdminService.getInternships(getServiceActor(req), req.query || {});
 
-    const query = {};
-    if (location && location !== 'All') query.location = location;
-    if (category) query.category = category;
-    if (internshipType) query.internshipType = internshipType;
-    if (search) query.$text = { $search: search };
-
-    const [internships, total] = await Promise.all([
-      InternshipPosting.find(query)
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .skip((parseInt(page) - 1) * parseInt(limit))
-        .lean(),
-      InternshipPosting.countDocuments(query),
-    ]);
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      internshipPostings: internships,
-      pagination: { total, page: parseInt(page), limit: parseInt(limit) },
+      internshipPostings: payload.internships || [],
+      pagination: payload.pagination || null,
     });
   } catch (error) {
     next(error);
@@ -754,11 +681,12 @@ exports.getInternships = async (req, res, next) => {
 
 exports.getInternshipById = async (req, res, next) => {
   try {
-    const internshipPosting = await InternshipPosting.findById(req.params.id).lean();
-    if (!internshipPosting) {
-      return res.status(404).json({ success: false, message: 'Internship posting not found' });
-    }
-    return res.status(200).json({ success: true, internshipPosting });
+    const internshipPosting = await chartersAdminService.getInternshipById(getServiceActor(req), req.params.id);
+
+    res.status(200).json({
+      success: true,
+      internshipPosting,
+    });
   } catch (error) {
     next(error);
   }
@@ -766,35 +694,19 @@ exports.getInternshipById = async (req, res, next) => {
 
 exports.createInternship = async (req, res, next) => {
   try {
-    const actorId = req.user?.chartersUserId || String(req.user?._id || '');
-    const {
-      title, company, location, internshipType, category, stipend, duration, description,
-    } = req.body || {};
-
-    if (!title || !location || !internshipType || !category || !stipend || !duration || !description) {
-      return res.status(400).json({ success: false, message: 'All fields are required' });
-    }
-
-    const internshipPosting = await InternshipPosting.create({
-      title: title.trim(),
-      company: company?.trim() || 'Charters Business',
-      location: location.trim(),
-      internshipType,
-      category: category.trim(),
-      stipend: stipend.trim(),
-      duration: duration.trim(),
-      description,
-      createdBy: actorId,
-    });
+    const internshipPosting = await chartersAdminService.createInternship(getServiceActor(req), req.body || {});
 
     await writeAuditLog({
       req,
       actionType: 'INTERNSHIP_CREATE',
       action: 'internship.created',
-      after: { internshipId: internshipPosting._id },
+      after: { internshipId: internshipPosting?._id || null },
     });
 
-    return res.status(201).json({ success: true, internshipPosting });
+    res.status(201).json({
+      success: true,
+      internshipPosting,
+    });
   } catch (error) {
     next(error);
   }
@@ -802,31 +714,19 @@ exports.createInternship = async (req, res, next) => {
 
 exports.updateInternship = async (req, res, next) => {
   try {
-    const allowedFields = [
-      'title', 'company', 'location', 'internshipType',
-      'category', 'stipend', 'duration', 'description', 'isActive',
-    ];
-    const updates = {};
-    allowedFields.forEach((field) => {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
-    });
-
-    const internshipPosting = await InternshipPosting.findByIdAndUpdate(
-      req.params.id, updates, { new: true, runValidators: true }
-    ).lean();
-
-    if (!internshipPosting) {
-      return res.status(404).json({ success: false, message: 'Internship posting not found' });
-    }
+    const internshipPosting = await chartersAdminService.updateInternship(getServiceActor(req), req.params.id, req.body || {});
 
     await writeAuditLog({
       req,
       actionType: 'INTERNSHIP_UPDATE',
       action: 'internship.updated',
-      after: { internshipId: internshipPosting._id },
+      after: { internshipId: internshipPosting?._id || req.params.id },
     });
 
-    return res.status(200).json({ success: true, internshipPosting });
+    res.status(200).json({
+      success: true,
+      internshipPosting,
+    });
   } catch (error) {
     next(error);
   }
@@ -834,13 +734,7 @@ exports.updateInternship = async (req, res, next) => {
 
 exports.deleteInternship = async (req, res, next) => {
   try {
-    const internshipPosting = await InternshipPosting.findByIdAndUpdate(
-      req.params.id, { isActive: false }, { new: true }
-    );
-
-    if (!internshipPosting) {
-      return res.status(404).json({ success: false, message: 'Internship posting not found' });
-    }
+    await chartersAdminService.deleteInternship(getServiceActor(req), req.params.id);
 
     await writeAuditLog({
       req,
@@ -849,7 +743,10 @@ exports.deleteInternship = async (req, res, next) => {
       after: { internshipId: req.params.id },
     });
 
-    return res.status(200).json({ success: true, message: 'Internship removed successfully' });
+    res.status(200).json({
+      success: true,
+      message: 'Internship removed successfully',
+    });
   } catch (error) {
     next(error);
   }
@@ -858,17 +755,17 @@ exports.deleteInternship = async (req, res, next) => {
 exports.getApplicationsForInternship = async (req, res, next) => {
   try {
     const payload = await chartersAdminService.getApplicationsForInternship(
-      getServiceActor(req), req.params.id, req.query || {}
+      getServiceActor(req),
+      req.params.id,
+      req.query || {}
     );
-    return res.status(200).json({
+
+    res.status(200).json({
       success: true,
       applications: payload.applications || [],
       pagination: payload.pagination || null,
     });
   } catch (error) {
-    if (shouldFallbackToLocal(error)) {
-      return res.status(200).json({ success: true, applications: [], pagination: null, source: 'local-fallback' });
-    }
     next(error);
   }
 };
