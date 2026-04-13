@@ -4,6 +4,8 @@ const CandidateLink = require('../models/CandidateLink');
 const CandidateAccess = require('../models/CandidateAccess');
 const AuditLog = require('../models/AuditLog');
 const chartersAdminService = require('../services/chartersAdminService');
+const JobPosting = require('../models/JobPosting.model');
+const InternshipPosting = require('../models/InternshipPosting.model');
 const { cloneDefaultPermissions } = require('../utils/defaultPermissions');
 
 const getSafeNumber = (value) => (Number.isFinite(value) ? value : 0);
@@ -561,7 +563,37 @@ exports.getPermissions = async (req, res, next) => {
 
 exports.getJobs = async (req, res, next) => {
   try {
-    const payload = await chartersAdminService.getJobs(getServiceActor(req), req.query || {});
+    let payload;
+    try {
+      payload = await chartersAdminService.getJobs(getServiceActor(req), req.query || {});
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      // Local fallback
+      const { page = 1, limit = 10 } = req.query || {};
+      const [jobs, count] = await Promise.all([
+        JobPosting.find({})
+          .sort({ createdAt: -1 })
+          .limit(parseInt(limit))
+          .skip((parseInt(page) - 1) * parseInt(limit))
+          .lean(),
+        JobPosting.countDocuments({})
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        jobPostings: jobs,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          pages: Math.ceil(count / limit),
+          limit: parseInt(limit),
+        },
+        source: 'local-fallback',
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -575,7 +607,22 @@ exports.getJobs = async (req, res, next) => {
 
 exports.getJobById = async (req, res, next) => {
   try {
-    const jobPosting = await chartersAdminService.getJobById(getServiceActor(req), req.params.id);
+    let jobPosting;
+    try {
+      jobPosting = await chartersAdminService.getJobById(getServiceActor(req), req.params.id);
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      jobPosting = await JobPosting.findById(req.params.id).populate('createdBy', 'name email');
+      if (!jobPosting) {
+        return res.status(404).json({
+          success: false,
+          message: 'Job posting not found',
+        });
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -667,7 +714,37 @@ exports.getApplicationsForJob = async (req, res, next) => {
 
 exports.getInternships = async (req, res, next) => {
   try {
-    const payload = await chartersAdminService.getInternships(getServiceActor(req), req.query || {});
+    let payload;
+    try {
+      payload = await chartersAdminService.getInternships(getServiceActor(req), req.query || {});
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      // Local fallback
+      const { page = 1, limit = 10 } = req.query || {};
+      const [internships, count] = await Promise.all([
+        InternshipPosting.find({})
+          .sort({ createdAt: -1 })
+          .limit(parseInt(limit))
+          .skip((parseInt(page) - 1) * parseInt(limit))
+          .lean(),
+        InternshipPosting.countDocuments({})
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        internshipPostings: internships,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          pages: Math.ceil(count / limit),
+          limit: parseInt(limit),
+        },
+        source: 'local-fallback',
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -681,7 +758,22 @@ exports.getInternships = async (req, res, next) => {
 
 exports.getInternshipById = async (req, res, next) => {
   try {
-    const internshipPosting = await chartersAdminService.getInternshipById(getServiceActor(req), req.params.id);
+    let internshipPosting;
+    try {
+      internshipPosting = await chartersAdminService.getInternshipById(getServiceActor(req), req.params.id);
+    } catch (error) {
+      if (!shouldFallbackToLocal(error)) {
+        throw error;
+      }
+
+      internshipPosting = await InternshipPosting.findById(req.params.id).populate('createdBy', 'name email');
+      if (!internshipPosting) {
+        return res.status(404).json({
+          success: false,
+          message: 'Internship posting not found',
+        });
+      }
+    }
 
     res.status(200).json({
       success: true,
