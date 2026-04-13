@@ -6,7 +6,6 @@ const RETRYABLE_METHODS = new Set(['get', 'head', 'options']);
 const ALLOWED_ACTING_ROLES = new Set(['admin', 'recruiter']);
 const PROD_CHARTERS_BASE_URLS = [
   'https://charters-business.onrender.com',
-  'https://charters-business.vercel.app',
 ];
 const LOCAL_CHARTERS_BASE_URL = 'http://localhost:5000';
 const DEFAULT_LOGIN_PATHS = ['/api/v1/auth/login', '/api/auth/login'];
@@ -37,7 +36,16 @@ const isLocalRuntime = () => process.env.NODE_ENV !== 'production';
 const REQUEST_TIMEOUT_MS = normalizeTimeout(process.env.CHARTERS_API_TIMEOUT_MS, 5000);
 const RETRY_COUNT = normalizeTimeout(process.env.CHARTERS_API_RETRY_COUNT, 2);
 const RETRY_BASE_DELAY_MS = normalizeTimeout(process.env.CHARTERS_API_RETRY_DELAY_MS, 200);
-const LOGIN_RETRY_COUNT = normalizeTimeout(process.env.CHARTERS_LOGIN_RETRY_COUNT, 1);
+const LOGIN_RETRY_COUNT = normalizeTimeout(process.env.CHARTERS_LOGIN_RETRY_COUNT, 2);
+
+const KNOWN_BAD_ENDPOINTS = new Map(); // tracks 404 paths per base URL
+
+const calculateBackoff = (attempt, isRateLimited = false) => {
+  const base = isRateLimited ? 1000 : RETRY_BASE_DELAY_MS;
+  const exponential = Math.pow(2, attempt - 1);
+  const jitter = Math.random() * 200;
+  return Math.min(base * exponential + jitter, 10000); // capped at 10s
+};
 
 const withTunnelPriorityForLocal = (urls) => {
   const unique = Array.from(new Set((urls || []).filter(Boolean)));
@@ -526,14 +534,17 @@ const requestWithRetry = async (client, method, url, requestConfig = {}) => {
       }
 
       attempt += 1;
+      const delay = calculateBackoff(attempt, statusCode === 429);
+
       logUpstreamEvent('warn', 'upstream_request_retry', {
         requestId: trace.requestId || null,
         method: normalizedMethod.toUpperCase(),
         url: upstreamUrl,
         statusCode,
         retryCount: attempt,
+        nextRetryInMs: delay,
       });
-      await sleep(RETRY_BASE_DELAY_MS * attempt);
+      await sleep(delay);
     }
   }
 };
@@ -549,6 +560,9 @@ const chartersAdminService = {
       const client = createClient(requestContext, false, baseURL);
 
       for (const loginPath of loginPaths) {
+        if (KNOWN_BAD_ENDPOINTS.get(baseURL)?.has(loginPath)) {
+          continue;
+        }
         let retryAttempt = 0;
 
         while (true) {
@@ -596,15 +610,24 @@ const chartersAdminService = {
 
             if (canRetryCurrentTarget) {
               retryAttempt += 1;
+              const delay = calculateBackoff(retryAttempt, status === 429);
+
               logUpstreamEvent('warn', 'upstream_login_validation_retry', {
                 requestId: client.__chartersTrace?.requestId || null,
                 method: 'POST',
                 url: `${baseURL}${loginPath}`,
                 statusCode: status || null,
                 retryCount: retryAttempt,
+                nextRetryInMs: delay,
               });
-              await sleep(RETRY_BASE_DELAY_MS * retryAttempt);
+              await sleep(delay);
               continue;
+            }
+
+            if (status === 404 && isLikelyRouteMissing404(error)) {
+              const badEndpoints = KNOWN_BAD_ENDPOINTS.get(baseURL) || new Set();
+              badEndpoints.add(loginPath);
+              KNOWN_BAD_ENDPOINTS.set(baseURL, badEndpoints);
             }
 
             logUpstreamEvent('error', 'upstream_login_validation_failure', {

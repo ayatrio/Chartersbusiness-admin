@@ -51,6 +51,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 const DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/charters-business-admin-[a-z0-9-]+\.vercel\.app$/i,
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,
 ];
 
 const parseAllowedOrigins = (value) => String(value || '')
@@ -148,10 +150,16 @@ app.use((req, res, next) => {
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || isAllowedOrigin(origin)) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) {
         return callback(null, true);
       }
 
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS] Request blocked from unauthorized origin: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
