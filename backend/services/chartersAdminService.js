@@ -14,8 +14,11 @@ const SERVICE_KEY_ID_HEADER = 'x-service-key-id';
 const ACTING_ADMIN_TOKEN_HEADER = 'x-acting-admin-token';
 
 const normalizeBaseUrl = (rawUrl) => {
-  const value = String(rawUrl || '').trim();
-  return value.replace(/\/$/, '');
+  let value = String(rawUrl || '').trim();
+  value = value.replace(/\/$/, '');
+  // Prevent double /api when calling internal endpoints
+  value = value.replace(/\/api$/, '');
+  return value;
 };
 
 const getDefaultChartersBaseUrls = () => (
@@ -94,7 +97,14 @@ const getChartersBaseUrls = () => {
 
 const getLoginPaths = () => {
   const configuredPaths = parseCsvValues(process.env.CHARTERS_ADMIN_LOGIN_PATHS)
-    .map((path) => `/${String(path || '').trim().replace(/^\/+/, '')}`)
+    .map((path) => {
+      let p = String(path || '').trim().replace(/^\/+/, '');
+      // Ensure we don't double up /api if it's already in the login path
+      if (!p.startsWith('api/')) {
+        p = `api/${p}`;
+      }
+      return `/${p}`;
+    })
     .filter((path) => path !== '/');
 
   if (configuredPaths.length > 0) {
