@@ -50,6 +50,10 @@ const shouldFallbackToLocal = (error) => {
     return true;
   }
 
+  if (status === 401 && message.includes('acting admin')) {
+    return true;
+  }
+
   return (
     message.includes('route not found') ||
     message.includes('upstream') ||
