@@ -51,6 +51,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 const DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/charters-business-admin-[a-z0-9-]+\.vercel\.app$/i,
+  /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/,
+  /^http:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/,
 ];
 
 const parseAllowedOrigins = (value) => String(value || '')
