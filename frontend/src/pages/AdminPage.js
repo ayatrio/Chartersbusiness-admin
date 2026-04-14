@@ -35,6 +35,26 @@ const PERMISSION_TEMPLATE = {
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const USERS_CACHE_KEY = 'admin_users_cache_v1';
+
+const readUsersCache = () => {
+  try {
+    const raw = sessionStorage.getItem(USERS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeUsersCache = (entries) => {
+  try {
+    sessionStorage.setItem(USERS_CACHE_KEY, JSON.stringify(entries));
+  } catch {
+    // ignore cache write failures
+  }
+};
 
 function normalizeUser(entry = {}) {
   return {
@@ -81,7 +101,31 @@ export default function AdminPage() {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const { data } = await api.get('/admin/users');
-        setUsers((data.users || []).map(normalizeUser));
+        const nextUsers = (data.users || []).map(normalizeUser);
+        const source = String(data?.source || '').toLowerCase();
+        const isFallbackSource = source === 'local-fallback' || source === 'mirror-fallback';
+
+        if (nextUsers.length > 0) {
+          setUsers(nextUsers);
+          writeUsersCache(nextUsers);
+          setLoading(false);
+          return;
+        }
+
+        if (isFallbackSource) {
+          const cachedUsers = readUsersCache();
+          if (cachedUsers.length > 0) {
+            setUsers(cachedUsers);
+            setError('Upstream is rate-limited. Showing cached users.');
+          } else {
+            setUsers([]);
+            setError('Upstream is rate-limited and no cached users are available yet. Please retry shortly.');
+          }
+          setLoading(false);
+          return;
+        }
+
+        setUsers(nextUsers);
         setLoading(false);
         return;
       } catch (err) {
@@ -106,6 +150,12 @@ export default function AdminPage() {
       fetchUsers();
     }
   }, [user, fetchUsers]);
+
+  useEffect(() => {
+    if (users.length > 0) {
+      writeUsersCache(users);
+    }
+  }, [users]);
 
   const filteredUsers = useMemo(() => {
     const search = query.trim().toLowerCase();
