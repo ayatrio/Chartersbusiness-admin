@@ -103,7 +103,11 @@ export default function AdminPage() {
         const { data } = await api.get('/admin/users');
         const nextUsers = (data.users || []).map(normalizeUser);
         const source = String(data?.source || '').toLowerCase();
-        const isFallbackSource = source === 'local-fallback' || source === 'mirror-fallback';
+        const isFallbackSource = source === 'local-fallback'
+          || source === 'mirror-fallback'
+          || source === 'crossdb-fallback'
+          || source === 'merged-fallback'
+          || source === 'fallback-empty';
 
         if (nextUsers.length > 0) {
           setUsers(nextUsers);

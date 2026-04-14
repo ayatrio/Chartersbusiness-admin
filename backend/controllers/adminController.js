@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/Admin');
 const ProfileBranding = require('../models/ProfileBranding');
 const CandidateLink = require('../models/CandidateLink');
@@ -19,6 +20,7 @@ const NETWORK_FALLBACK_CODES = new Set([
   'ECONNRESET',
 ]);
 const ACCESS_USER_CATEGORIES = new Set(['user', 'candidate']);
+const CHARTERS_DB_NAMES = ['charters-business', 'charters_business'];
 
 const readBoolean = (value, fallback = false) => {
   if (value === undefined || value === null || String(value).trim() === '') {
@@ -134,6 +136,179 @@ const splitName = (value) => {
     firstName: firstName || '',
     lastName: rest.join(' '),
   };
+};
+
+const getMongoClient = () => {
+  const model = CandidateAccess;
+  return model?.db?.client || null;
+};
+
+const findChartersUsersCollection = async () => {
+  const client = getMongoClient();
+  if (!client) return null;
+
+  for (const dbName of CHARTERS_DB_NAMES) {
+    try {
+      const db = client.db(dbName);
+      const collections = await db.listCollections({ name: 'users' }, { nameOnly: true }).toArray();
+      if (collections.length > 0) {
+        return db.collection('users');
+      }
+    } catch (error) {
+      // try next db alias
+    }
+  }
+
+  return null;
+};
+
+const toObjectIdOrNull = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw || !mongoose.Types.ObjectId.isValid(raw)) {
+    return null;
+  }
+  return new mongoose.Types.ObjectId(raw);
+};
+
+const mapChartersUserDoc = (doc, access = null, link = null, profile = null) => {
+  const chartersUserId = String(doc?._id || '');
+  if (!chartersUserId) return null;
+
+  const names = splitName(doc?.name || '');
+  const status = doc?.status || mapLocalUserStatus(doc?.isActive);
+
+  return {
+    _id: chartersUserId,
+    chartersUserId,
+    pbUserId: link?.pbUserId || null,
+    name: doc?.name || null,
+    firstName: names.firstName,
+    lastName: names.lastName,
+    email: doc?.email || link?.email || null,
+    phone: doc?.phoneNumber || link?.phone || null,
+    role: resolveDisplayRole(doc?.role || 'user', access),
+    userCategory: normalizeUserCategory(access?.userCategory) || null,
+    status,
+    isActive: status === 'active',
+    permissions: normalizePermissions(access?.permissions || {}),
+    profileScores: mapProfileScores(profile),
+    createdAt: doc?.createdAt || null,
+    updatedAt: doc?.updatedAt || null,
+    lastLogin: doc?.lastLogin || null,
+  };
+};
+
+const getCrossDbUsersForAdmin = async () => {
+  const usersCollection = await findChartersUsersCollection();
+  if (!usersCollection) return [];
+
+  const docs = await usersCollection.find(
+    { role: { $in: ['user', 'candidate', 'admin', 'recruiter'] } },
+    {
+      projection: {
+        _id: 1,
+        name: 1,
+        email: 1,
+        phoneNumber: 1,
+        role: 1,
+        status: 1,
+        isActive: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        lastLogin: 1,
+      },
+    }
+  ).sort({ createdAt: -1 }).toArray();
+
+  if (!docs.length) return [];
+
+  const chartersIds = docs.map((doc) => String(doc._id));
+  const [links, accessEntries] = await Promise.all([
+    CandidateLink.find({ chartersUserId: { $in: chartersIds } }),
+    CandidateAccess.find({ chartersUserId: { $in: chartersIds } }),
+  ]);
+
+  const linkMap = new Map(links.map((entry) => [entry.chartersUserId, entry]));
+  const accessMap = new Map(accessEntries.map((entry) => [entry.chartersUserId, entry]));
+
+  const pbUserIds = links.map((entry) => entry.pbUserId).filter(Boolean);
+  const profiles = pbUserIds.length
+    ? await ProfileBranding.find({ userId: { $in: pbUserIds } }).select('userId scores lastCalculated')
+    : [];
+  const profileMap = new Map(profiles.map((entry) => [String(entry.userId), entry]));
+
+  return docs
+    .map((doc) => {
+      const chartersUserId = String(doc._id);
+      const link = linkMap.get(chartersUserId) || null;
+      const access = accessMap.get(chartersUserId) || null;
+      const profile = link?.pbUserId ? profileMap.get(String(link.pbUserId)) : null;
+      return mapChartersUserDoc(doc, access, link, profile);
+    })
+    .filter(Boolean);
+};
+
+const getCrossDbUserById = async (chartersUserId) => {
+  const usersCollection = await findChartersUsersCollection();
+  const objectId = toObjectIdOrNull(chartersUserId);
+  if (!usersCollection || !objectId) return null;
+
+  const doc = await usersCollection.findOne(
+    {
+      _id: objectId,
+      role: { $in: ['user', 'candidate', 'admin', 'recruiter'] },
+    },
+    {
+      projection: {
+        _id: 1,
+        name: 1,
+        email: 1,
+        phoneNumber: 1,
+        role: 1,
+        status: 1,
+        isActive: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        lastLogin: 1,
+      },
+    }
+  );
+
+  if (!doc) return null;
+
+  const [link, access] = await Promise.all([
+    CandidateLink.findOne({ chartersUserId }),
+    CandidateAccess.findOne({ chartersUserId }),
+  ]);
+
+  const profile = link?.pbUserId
+    ? await ProfileBranding.findOne({ userId: link.pbUserId }).select('userId scores lastCalculated')
+    : null;
+
+  return mapChartersUserDoc(doc, access, link, profile);
+};
+
+const mergeFallbackUsers = (...entryGroups) => {
+  const seen = new Set();
+  const merged = [];
+
+  for (const entries of entryGroups) {
+    for (const entry of entries || []) {
+      const key = String(entry?.chartersUserId || entry?._id || '').trim();
+      if (!key || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      merged.push(entry);
+    }
+  }
+
+  return merged.sort((left, right) => {
+    const leftTime = new Date(left?.updatedAt || left?.createdAt || 0).getTime();
+    const rightTime = new Date(right?.updatedAt || right?.createdAt || 0).getTime();
+    return rightTime - leftTime;
+  });
 };
 
 const hasEnabledPermissions = (permissions = {}) => {
@@ -477,18 +652,29 @@ exports.getUsers = async (req, res, next) => {
         throw error;
       }
 
-      const users = await getLocalUsersForAdmin();
-      const mirroredUsers = users.length ? users : await getMirroredUsersForAdmin();
+      const [crossDbUsers, localUsers, mirroredUsers] = await Promise.all([
+        getCrossDbUsersForAdmin(),
+        getLocalUsersForAdmin(),
+        getMirroredUsersForAdmin(),
+      ]);
+      const fallbackUsers = mergeFallbackUsers(crossDbUsers, localUsers, mirroredUsers);
+      const sourceParts = [];
+      if (crossDbUsers.length) sourceParts.push('crossdb');
+      if (localUsers.length) sourceParts.push('local');
+      if (mirroredUsers.length) sourceParts.push('mirror');
+      const source = sourceParts.length === 0
+        ? 'fallback-empty'
+        : (sourceParts.length === 1 ? `${sourceParts[0]}-fallback` : 'merged-fallback');
 
       return res.status(200).json({
         success: true,
-        users: mirroredUsers,
+        users: fallbackUsers,
         pagination: {
-          total: mirroredUsers.length,
+          total: fallbackUsers.length,
           page: 1,
-          limit: mirroredUsers.length,
+          limit: fallbackUsers.length,
         },
-        source: users.length ? 'local-fallback' : 'mirror-fallback',
+        source,
       });
     }
 
@@ -514,7 +700,7 @@ exports.getUsers = async (req, res, next) => {
     const profiles = await ProfileBranding.find({ userId: { $in: pbUserIds } }).select('userId scores lastCalculated');
     const profileMap = new Map(profiles.map((profile) => [String(profile.userId), profile]));
 
-    const users = candidates.map((candidate) => {
+    const upstreamUsers = candidates.map((candidate) => {
       const chartersUserId = String(candidate._id);
       const link = linkMap.get(chartersUserId) || null;
       const access = accessMap.get(chartersUserId) || null;
@@ -522,10 +708,21 @@ exports.getUsers = async (req, res, next) => {
       return shapeAdminUser({ candidate, link, access, profile });
     });
 
+    const [crossDbUsers, localUsers] = await Promise.all([
+      getCrossDbUsersForAdmin(),
+      getLocalUsersForAdmin(),
+    ]);
+    const users = mergeFallbackUsers(upstreamUsers, crossDbUsers, localUsers);
+    const source = (crossDbUsers.length || localUsers.length) ? 'charters-enriched' : 'charters';
+
     res.status(200).json({
       success: true,
       users,
-      pagination: payload.pagination || null,
+      pagination: {
+        ...(payload.pagination || {}),
+        total: users.length,
+      },
+      source,
     });
   } catch (error) {
     next(error);
@@ -558,16 +755,22 @@ exports.updatePermissions = async (req, res, next) => {
         .select('email firstName lastName phone selectedCourse role permissions permissionsVersion isActive createdAt updatedAt lastLogin');
 
       if (!localUser) {
-        const mirroredCandidate = await getMirroredCandidateById(chartersUserId);
-        if (!mirroredCandidate) {
-          return res.status(404).json({
-            success: false,
-            message: 'Candidate not found',
-          });
-        }
+        const crossDbCandidate = await getCrossDbUserById(chartersUserId);
+        if (crossDbCandidate) {
+          candidate = crossDbCandidate;
+          usedLocalFallback = true;
+        } else {
+          const mirroredCandidate = await getMirroredCandidateById(chartersUserId);
+          if (!mirroredCandidate) {
+            return res.status(404).json({
+              success: false,
+              message: 'Candidate not found',
+            });
+          }
 
-        candidate = mirroredCandidate;
-        usedLocalFallback = true;
+          candidate = mirroredCandidate;
+          usedLocalFallback = true;
+        }
       } else {
         candidate = toLocalCandidateShape(localUser);
         usedLocalFallback = true;
@@ -649,16 +852,22 @@ exports.elevateUserToCandidate = async (req, res, next) => {
         .select('email firstName lastName phone selectedCourse role permissions permissionsVersion isActive createdAt updatedAt lastLogin');
 
       if (!localUser) {
-        const mirroredCandidate = await getMirroredCandidateById(chartersUserId);
-        if (!mirroredCandidate) {
-          return res.status(404).json({
-            success: false,
-            message: 'User not found',
-          });
-        }
+        const crossDbCandidate = await getCrossDbUserById(chartersUserId);
+        if (crossDbCandidate) {
+          candidate = crossDbCandidate;
+          usedLocalFallback = true;
+        } else {
+          const mirroredCandidate = await getMirroredCandidateById(chartersUserId);
+          if (!mirroredCandidate) {
+            return res.status(404).json({
+              success: false,
+              message: 'User not found',
+            });
+          }
 
-        candidate = mirroredCandidate;
-        usedLocalFallback = true;
+          candidate = mirroredCandidate;
+          usedLocalFallback = true;
+        }
       } else {
         candidate = toLocalCandidateShape(localUser);
         usedLocalFallback = true;
@@ -827,6 +1036,11 @@ exports.getPermissions = async (req, res, next) => {
         candidate = {
           status: localUser.isActive === false ? 'disabled' : 'active',
         };
+      } else {
+        const crossDbCandidate = await getCrossDbUserById(chartersUserId);
+        if (crossDbCandidate) {
+          candidate = crossDbCandidate;
+        }
       }
     }
 
