@@ -6,6 +6,7 @@ import Button from '../../../components/Common/Button';
 import InputField from '../../../components/Common/InputField';
 import { profileService, aiService } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import {
   normalizeLinkedInUrl,
   validateLinkedInUrl,
@@ -337,7 +338,7 @@ function CertificationForm({ certifications = [], onChange, maxCertifications = 
 
 export default function LinkedInPage() {
   const { user } = useAuth();
-  const hasAccess = user?.permissions?.profileBranding?.headlineGenerator;
+  const hasAccess = hasProfileBrandingAccess(user?.permissions?.profileBranding, 'linkedin');
   // Apify-based fetch — no manual browser login required
   const [isLoggedIn, setIsLoggedIn] = useState(true);
 

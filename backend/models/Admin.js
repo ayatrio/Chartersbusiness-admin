@@ -1,24 +1,12 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { cloneDefaultPermissions } = require('../utils/defaultPermissions');
 
 const AVAILABLE_COURSES = [
   'Certified Management Professional (CMP)',
   'Digital Growth Engineer',
   'Product Growth Engineering'
 ];
-
-// 🔥 Default permissions (central place)
-const defaultPermissions = {
-  profileBranding: {
-    headlineGenerator: false,
-    aboutGenerator: false,
-    keywordOptimizer: false
-  },
-  aiInterview: {
-    mockInterview: false,
-    feedbackAnalysis: false
-  }
-};
 
 const adminSchema = new mongoose.Schema(
   {
@@ -74,7 +62,7 @@ const adminSchema = new mongoose.Schema(
     // 🔥 NEW: Permissions system
     permissions: {
       type: Object,
-      default: defaultPermissions
+      default: cloneDefaultPermissions
     },
 
     // 🔥 NEW: Token invalidation version

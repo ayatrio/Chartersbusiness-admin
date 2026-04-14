@@ -23,6 +23,10 @@ import { profileService } from '../../../services/api';
 import PageLayout from '../../../components/Layout/PageLayout';
 import Card from '../../../components/Common/Card';
 import ScoreRing from '../../../components/Common/ScoreRing';
+import {
+  hasProfileBrandingAccess,
+  normalizeProfileBrandingPermissions,
+} from '../../../utils/permissions';
 
 const readBoolean = (value) => Boolean(value);
 const readNumber = (value) => (Number.isFinite(value) ? value : 0);
@@ -40,7 +44,9 @@ export default function DashboardHome() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const profilePermissions = user?.permissions?.profileBranding || {};
+  const profilePermissions = normalizeProfileBrandingPermissions(
+    user?.permissions?.profileBranding || {}
+  );
   const aiPermissions = user?.permissions?.aiInterview || {};
   const isAdminUser = ['admin', 'recruiter'].includes(String(user?.role || '').toLowerCase());
   const profilePermissionCount = Object.values(profilePermissions).filter(readBoolean).length;
@@ -91,7 +97,7 @@ export default function DashboardHome() {
       description: 'Strengthen discoverability and profile structure with guided checks.',
       to: '/linkedin',
       icon: RiLinkedinBoxLine,
-      enabled: readBoolean(profilePermissions.headlineGenerator)
+      enabled: hasProfileBrandingAccess(profilePermissions, 'linkedin')
     },
     {
       id: 'github',
@@ -100,7 +106,7 @@ export default function DashboardHome() {
       description: 'Review repo quality, profile signals, and brand-fit technical visibility.',
       to: '/github',
       icon: RiGithubLine,
-      enabled: readBoolean(profilePermissions.keywordOptimizer)
+      enabled: hasProfileBrandingAccess(profilePermissions, 'github')
     },
     {
       id: 'website',
@@ -109,7 +115,7 @@ export default function DashboardHome() {
       description: 'Validate structure, essentials, and impact cues on your personal site.',
       to: '/website',
       icon: RiGlobalLine,
-      enabled: readBoolean(profilePermissions.headlineGenerator)
+      enabled: hasProfileBrandingAccess(profilePermissions, 'website')
     },
     {
       id: 'networking',
@@ -118,7 +124,7 @@ export default function DashboardHome() {
       description: 'Measure consistency and social proof signals across your professional reach.',
       to: '/networking',
       icon: RiTeamLine,
-      enabled: readBoolean(profilePermissions.headlineGenerator)
+      enabled: hasProfileBrandingAccess(profilePermissions, 'socialMedia')
     },
     {
       id: 'youtube',
@@ -127,7 +133,7 @@ export default function DashboardHome() {
       description: 'Analyze educational content signal and how it boosts your brand authority.',
       to: '/youtube',
       icon: RiYoutubeLine,
-      enabled: readBoolean(profilePermissions.headlineGenerator)
+      enabled: hasProfileBrandingAccess(profilePermissions, 'youtube')
     },
     {
       id: 'credentials',
@@ -136,7 +142,7 @@ export default function DashboardHome() {
       description: 'Organize proof of skill development and keep your profile credibility fresh.',
       to: '/credentials',
       icon: RiAwardLine,
-      enabled: true
+      enabled: hasProfileBrandingAccess(profilePermissions, 'credentials')
     },
     {
       id: 'ai-tools',
@@ -145,7 +151,7 @@ export default function DashboardHome() {
       description: 'Use AI to tighten messaging and profile narrative quality faster.',
       to: '/ai-tools',
       icon: RiMagicLine,
-      enabled: readBoolean(profilePermissions.headlineGenerator)
+      enabled: hasProfileBrandingAccess(profilePermissions, 'linkedin')
     },
     {
       id: 'ai-interview',

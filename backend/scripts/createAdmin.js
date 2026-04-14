@@ -3,6 +3,7 @@ require('dotenv').config();
 
 const connectDB = require('../config/database');
 const User = require('../models/Admin');
+const { normalizePermissions } = require('../utils/defaultPermissions');
 
 const createAdmin = async () => {
   try {
@@ -18,21 +19,11 @@ const createAdmin = async () => {
     if (existingAdmin) {
       console.log('ℹ️ Admin already exists');
 
-      if (existingAdmin.role !== 'admin') {
-        existingAdmin.role = 'admin';
-        existingAdmin.isActive = true;
-
-        // 🔥 Ensure permissions exist
-        if (!existingAdmin.permissions) {
-          existingAdmin.permissions = {};
-        }
-
-        await existingAdmin.save();
-
-        console.log('✅ Updated user to admin');
-      } else {
-        console.log('✅ Already an admin');
-      }
+      existingAdmin.role = 'admin';
+      existingAdmin.isActive = true;
+      existingAdmin.permissions = normalizePermissions(existingAdmin.permissions || {});
+      await existingAdmin.save();
+      console.log('Ensured admin role and normalized permissions');
 
     } else {
       // 🆕 Create new admin
@@ -49,9 +40,12 @@ const createAdmin = async () => {
         // 🔥 Give full access
         permissions: {
           profileBranding: {
-            headlineGenerator: true,
-            aboutGenerator: true,
-            keywordOptimizer: true
+            linkedin: true,
+            website: true,
+            youtube: true,
+            socialMedia: true,
+            credentials: true,
+            github: true
           },
           aiInterview: {
             mockInterview: true,
@@ -76,3 +70,4 @@ const createAdmin = async () => {
 };
 
 createAdmin();
+

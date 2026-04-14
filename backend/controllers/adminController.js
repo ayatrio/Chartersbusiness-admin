@@ -4,7 +4,10 @@ const CandidateLink = require('../models/CandidateLink');
 const CandidateAccess = require('../models/CandidateAccess');
 const AuditLog = require('../models/AuditLog');
 const chartersAdminService = require('../services/chartersAdminService');
-const { cloneDefaultPermissions } = require('../utils/defaultPermissions');
+const {
+  cloneDefaultPermissions,
+  normalizePermissions,
+} = require('../utils/defaultPermissions');
 
 const getSafeNumber = (value) => (Number.isFinite(value) ? value : 0);
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
@@ -154,8 +157,9 @@ const getLocalUsersForAdmin = async () => {
     const profile = profileMap.get(chartersUserId) || null;
     const baseCandidate = toLocalCandidateShape(userDoc);
     const status = mapLocalUserStatus(userDoc.isActive);
-    const defaultPermissions = deepMerge(cloneDefaultPermissions(), userDoc.permissions || {});
-    const mergedPermissions = deepMerge(defaultPermissions, access?.permissions || {});
+    const mergedPermissions = normalizePermissions(
+      deepMerge(userDoc.permissions || {}, access?.permissions || {})
+    );
 
     return {
       _id: chartersUserId,
@@ -269,7 +273,7 @@ const ensureCandidateLink = async (candidate) => {
 };
 
 const shapeAdminUser = ({ candidate, link, access, profile }) => {
-  const mergedPermissions = deepMerge(cloneDefaultPermissions(), access?.permissions || {});
+  const mergedPermissions = normalizePermissions(access?.permissions || {});
   const status = normalizeCandidateStatus(candidate);
 
   return {
@@ -392,8 +396,10 @@ exports.updatePermissions = async (req, res, next) => {
     }
 
     const existing = await CandidateAccess.findOne({ chartersUserId });
-    const beforePermissions = deepMerge(cloneDefaultPermissions(), existing?.permissions || {});
-    const mergedPermissions = deepMerge(beforePermissions, requestedPermissions);
+    const beforePermissions = normalizePermissions(existing?.permissions || {});
+    const mergedPermissions = normalizePermissions(
+      deepMerge(beforePermissions, requestedPermissions)
+    );
 
     const updated = await CandidateAccess.findOneAndUpdate(
       { chartersUserId },
@@ -414,7 +420,7 @@ exports.updatePermissions = async (req, res, next) => {
     if (usedLocalFallback) {
       const localUser = await User.findById(chartersUserId).select('permissions permissionsVersion');
       if (localUser) {
-        localUser.permissions = deepMerge(cloneDefaultPermissions(), mergedPermissions);
+        localUser.permissions = mergedPermissions;
         localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
         await localUser.save();
       }
@@ -552,7 +558,7 @@ exports.getPermissions = async (req, res, next) => {
       success: true,
       chartersUserId,
       status: candidate?.status || null,
-      permissions: deepMerge(cloneDefaultPermissions(), access?.permissions || {}),
+      permissions: normalizePermissions(access?.permissions || {}),
     });
   } catch (error) {
     next(error);
@@ -815,4 +821,3 @@ exports.updateApplicationStatus = async (req, res, next) => {
     next(error);
   }
 };
-

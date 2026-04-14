@@ -11,6 +11,7 @@ import {
   RiLockLine
 } from 'react-icons/ri';
 import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import { profileService } from '../../../services/api';
 import PageLayout from '../../../components/Layout/PageLayout';
 import Card from '../../../components/Common/Card';
@@ -20,7 +21,10 @@ import { EmptyState, ScorePreviewCard, SectionHeader } from '../../../components
 
 export default function YouTubePage() {
   const { user } = useAuth();
-  const hasAccess = user?.permissions?.profileBranding?.headlineGenerator;
+  const hasAccess = hasProfileBrandingAccess(
+    user?.permissions?.profileBranding,
+    'youtube'
+  );
   const [channelUrl, setChannelUrl] = useState('');
   const [youtube, setYoutube] = useState(null);
   const [loading, setLoading] = useState(true);

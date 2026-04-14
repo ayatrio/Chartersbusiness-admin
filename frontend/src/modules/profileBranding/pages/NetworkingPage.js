@@ -6,6 +6,7 @@ import InputField from '../../../components/Common/InputField';
 import { SectionHeader } from '../../../components/Common/SharedHelpers';
 import { profileService } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import toast from 'react-hot-toast';
 import {
   RiArticleLine,
@@ -64,7 +65,10 @@ const METRICS = [
 
 export default function NetworkingPage() {
   const { user } = useAuth();
-  const hasAccess = user?.permissions?.profileBranding?.headlineGenerator;
+  const hasAccess = hasProfileBrandingAccess(
+    user?.permissions?.profileBranding,
+    'socialMedia'
+  );
   const [form, setForm] = useState(INITIAL_FORM);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);

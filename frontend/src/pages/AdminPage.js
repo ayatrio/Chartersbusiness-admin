@@ -7,6 +7,12 @@ import PageLayout from '../components/Layout/PageLayout';
 import Card from '../components/Common/Card';
 import InputField from '../components/Common/InputField';
 import {
+  AI_INTERVIEW_PERMISSION_TEMPLATE,
+  PROFILE_BRANDING_PERMISSION_LABELS,
+  PROFILE_BRANDING_PERMISSION_TEMPLATE,
+  normalizePermissions as normalizePermissionSet,
+} from '../utils/permissions';
+import {
   RiArrowRightLine,
   RiDeleteBinLine,
   RiFilter3Line,
@@ -18,30 +24,14 @@ import {
   RiUserSettingsLine
 } from 'react-icons/ri';
 
-const PERMISSION_TEMPLATE = {
-  profileBranding: {
-    headlineGenerator: false,
-    aboutGenerator: false,
-    keywordOptimizer: false
-  },
-  aiInterview: {
-    mockInterview: false,
-    feedbackAnalysis: false
-  }
-};
-
 function normalizePermissions(permissions = {}) {
-  return {
-    profileBranding: {
-      ...PERMISSION_TEMPLATE.profileBranding,
-      ...(permissions.profileBranding || {})
-    },
-    aiInterview: {
-      ...PERMISSION_TEMPLATE.aiInterview,
-      ...(permissions.aiInterview || {})
-    }
-  };
+  return normalizePermissionSet(permissions);
 }
+
+const PERMISSION_TEMPLATE = {
+  profileBranding: PROFILE_BRANDING_PERMISSION_TEMPLATE,
+  aiInterview: AI_INTERVIEW_PERMISSION_TEMPLATE,
+};
 
 function normalizeUser(entry = {}) {
   return {
@@ -515,7 +505,11 @@ function PermissionGroup({
               opacity: disabled ? 0.6 : 1
             }}
           >
-            <span>{toTitle(feature)}</span>
+            <span>
+              {tool === 'profileBranding'
+                ? (PROFILE_BRANDING_PERMISSION_LABELS[feature] || toTitle(feature))
+                : toTitle(feature)}
+            </span>
             <ToggleVisual checked={Boolean(currentValue)} />
           </button>
         ))}

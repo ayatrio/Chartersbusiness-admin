@@ -5,6 +5,8 @@ import Button from '../../../components/Common/Button';
 import InputField from '../../../components/Common/InputField';
 import { EmptyState } from '../../../components/Common/SharedHelpers';
 import { profileService, aiService } from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import {
   scoreCertification,
   scoreCourse,
@@ -31,6 +33,12 @@ const EMPTY_COURSE = { title: '', platform: '', instructor: '', completionDate: 
 const EMPTY_RESEARCH = { title: '', platform: '', publishDate: '', url: '', description: '' };
 
 export default function CredentialsPage() {
+  const { user } = useAuth();
+  const hasAccess = hasProfileBrandingAccess(
+    user?.permissions?.profileBranding,
+    'credentials'
+  );
+
   const [certs,          setCerts]          = useState([]);
   const [courses,        setCourses]        = useState([]);
   const [researchPapers, setResearchPapers] = useState([]);
@@ -163,6 +171,30 @@ export default function CredentialsPage() {
       title="Credentials"
       subtitle="Each credential is intelligently scored by issuer prestige, duration, verifiability, and recency"
     >
+      <div style={{ position: 'relative' }}>
+        {!hasAccess && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.6)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            borderRadius: 12,
+            flexDirection: 'column',
+            gap: 10
+          }}>
+            <RiShieldCheckLine style={{ fontSize: 32 }} />
+            <div style={{ fontSize: 16, fontWeight: 600 }}>Access not granted by admin</div>
+          </div>
+        )}
+
+        <div style={{ opacity: hasAccess ? 1 : 0.5, pointerEvents: hasAccess ? 'auto' : 'none' }}>
       {/* ── Overall Score Banner ────────────────────────────────────── */}
       <div style={{
         display: 'grid',
@@ -457,6 +489,8 @@ export default function CredentialsPage() {
 
         {/* ── Scoring Guide ─────────────────────────────────────────── */}
         <ScoringGuide />
+      </div>
+        </div>
       </div>
     </PageLayout>
   );
@@ -863,3 +897,4 @@ function formatMonthYear(value) {
   const d = new Date(value);
   return isNaN(d.getTime()) ? String(value) : d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
+

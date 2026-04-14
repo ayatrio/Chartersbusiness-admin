@@ -6,6 +6,7 @@ import InputField from '../../../components/Common/InputField';
 import { SectionHeader, ScorePreviewCard } from '../../../components/Common/SharedHelpers';
 import { profileService } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import toast from 'react-hot-toast';
 import {
   RiGlobalLine, RiSearchLine, RiFileTextLine,
@@ -24,8 +25,10 @@ export default function WebsitePage() {
   const { user } = useAuth();
 
   // 🔒 Permission check
-  const hasAccess =
-    user?.permissions?.profileBranding?.headlineGenerator;
+  const hasAccess = hasProfileBrandingAccess(
+    user?.permissions?.profileBranding,
+    'website'
+  );
 
   const [url,        setUrl]        = useState('');
   const [website,    setWebsite]    = useState(null);

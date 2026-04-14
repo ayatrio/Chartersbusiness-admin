@@ -6,6 +6,7 @@ import InputField from '../../../components/Common/InputField';
 import { EmptyState, SectionHeader } from '../../../components/Common/SharedHelpers';
 import { aiService } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import toast from 'react-hot-toast';
 import {
   RiRobotLine, RiMagicLine, RiFileTextLine,
@@ -22,7 +23,7 @@ const TABS = [
 
 export default function AIToolsPage() {
   const { user } = useAuth();
-  const hasAccess = user?.permissions?.profileBranding?.headlineGenerator;
+  const hasAccess = hasProfileBrandingAccess(user?.permissions?.profileBranding, 'linkedin');
   const [activeTab, setActiveTab] = useState('headline');
 
   return (

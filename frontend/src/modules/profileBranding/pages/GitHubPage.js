@@ -6,6 +6,7 @@ import InputField from '../../../components/Common/InputField';
 import { SectionHeader, ScorePreviewCard } from '../../../components/Common/SharedHelpers';
 import { profileService } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import toast from 'react-hot-toast';
 import {
   RiGithubLine, RiSearchLine, RiCodeLine,
@@ -21,8 +22,10 @@ export default function GitHubPage() {
   const [fetching, setFetching] = useState(false);
 
   // 🔒 Permission check (GLOBAL for this page)
-  const hasAccess =
-    user?.permissions?.profileBranding?.keywordOptimizer ?? false;
+  const hasAccess = hasProfileBrandingAccess(
+    user?.permissions?.profileBranding,
+    'github'
+  );
 
   const load = useCallback(async () => {
     try {
