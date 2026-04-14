@@ -13,6 +13,7 @@ import {
   normalizePermissions as normalizePermissionSet,
 } from '../utils/permissions';
 import {
+  RiArrowUpLine,
   RiArrowRightLine,
   RiDeleteBinLine,
   RiFilter3Line,
@@ -67,6 +68,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [elevatingId, setElevatingId] = useState('');
   const [expandedScores, setExpandedScores] = useState({});
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -118,15 +120,18 @@ export default function AdminPage() {
   }, [users, query, roleFilter]);
 
   const roleOptions = useMemo(() => {
-    const roles = new Set(users.map((entry) => entry.role || 'candidate'));
-    return ['all', ...Array.from(roles)];
+    const roles = new Set(users.map((entry) => entry.role || 'user'));
+    const ordered = ['admin', 'candidate', 'user'].filter((role) => roles.has(role));
+    const custom = Array.from(roles).filter((role) => !ordered.includes(role));
+    return ['all', ...ordered, ...custom];
   }, [users]);
 
   const summary = useMemo(() => {
     const totals = {
       total: users.length,
       admins: users.filter((entry) => entry.role === 'admin').length,
-      candidates: users.filter((entry) => entry.role !== 'admin').length,
+      users: users.filter((entry) => entry.role === 'user').length,
+      candidates: users.filter((entry) => entry.role === 'candidate').length,
       profileBrandingEnabled: 0,
       aiInterviewEnabled: 0,
       scoredCandidates: 0,
@@ -154,6 +159,49 @@ export default function AdminPage() {
 
     return totals;
   }, [users]);
+
+  const elevateToCandidate = async (entry) => {
+    if (entry?.role !== 'user') {
+      return;
+    }
+
+    setElevatingId(entry._id);
+
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const { data } = await api.patch(`/admin/users/${entry._id}/elevate-candidate`);
+
+        setUsers((prev) => prev.map((item) => {
+          if (item._id !== entry._id) return item;
+          return {
+            ...item,
+            role: data?.user?.role || 'candidate',
+            userCategory: data?.user?.userCategory || 'candidate',
+            permissions: normalizePermissions(
+              data?.user?.permissions || item.permissions
+            )
+          };
+        }));
+
+        toast.success('User elevated to Candidate');
+        setElevatingId('');
+        return;
+      } catch (err) {
+        const status = err?.response?.status;
+        const isFinalAttempt = attempt === maxAttempts;
+
+        if (status === 429 && !isFinalAttempt) {
+          await sleep(1200 * attempt);
+          continue;
+        }
+
+        toast.error(err?.message || 'Failed to elevate user');
+        setElevatingId('');
+        return;
+      }
+    }
+  };
 
   const updateToolPermissions = async (userId, tool, nextToolPermissions, successMessage) => {
     const key = `${userId}-${tool}`;
@@ -285,6 +333,7 @@ export default function AdminPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 16 }}>
         <StatCard icon={<RiTeamLine />} label="Total Users" value={summary.total} accent="var(--navy)" />
         <StatCard icon={<RiShieldUserLine />} label="Admins" value={summary.admins} accent="var(--accent)" />
+        <StatCard icon={<RiUserSettingsLine />} label="Users" value={summary.users} accent="var(--navy-soft)" />
         <StatCard icon={<RiUserSettingsLine />} label="Candidates" value={summary.candidates} accent="var(--gold)" />
         <StatCard icon={<RiTrophyLine />} label="Avg Candidate Score" value={`${summary.averageCandidateScore}/100`} accent="var(--navy-soft)" />
         <StatCard icon={<RiShieldUserLine />} label="Profile Branding Enabled" value={summary.profileBrandingEnabled} accent="var(--green)" />
@@ -354,10 +403,12 @@ export default function AdminPage() {
             const aiPermissions = entry?.permissions?.aiInterview || {};
             const profileEnabled = Object.values(profilePermissions).filter(Boolean).length;
             const aiEnabled = Object.values(aiPermissions).filter(Boolean).length;
-            const isCandidate = entry.role !== 'admin';
+            const isCandidate = entry.role === 'candidate';
+            const isUserRole = entry.role === 'user';
             const scores = entry.profileScores;
             const isDeleting = deletingId === entry._id;
-            const isBusy = savingKey.startsWith(`${entry._id}-`) || isDeleting;
+            const isElevating = elevatingId === entry._id;
+            const isBusy = savingKey.startsWith(`${entry._id}-`) || isDeleting || isElevating;
             const isScoreOpen = Boolean(expandedScores[entry._id]);
 
             return (
@@ -413,6 +464,24 @@ export default function AdminPage() {
                         {isDeleting ? 'Removing...' : 'Remove Candidate'}
                       </button>
                     )}
+                    {isUserRole && (
+                      <button
+                        type="button"
+                        onClick={() => elevateToCandidate(entry)}
+                        disabled={isBusy}
+                        style={{
+                          ...bulkActionStyle,
+                          border: '1px solid rgba(45, 122, 96, 0.35)',
+                          background: 'var(--green-dim)',
+                          color: 'var(--green)',
+                          cursor: isBusy ? 'not-allowed' : 'pointer',
+                          opacity: isBusy ? 0.7 : 1
+                        }}
+                      >
+                        <RiArrowUpLine style={{ verticalAlign: 'text-bottom', marginRight: 6 }} />
+                        {isElevating ? 'Elevating...' : 'Elevate to Candidate'}
+                      </button>
+                    )}
                     <RoleBadge role={entry.role} />
                     {isBusy && !isDeleting && (
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Saving...</span>
@@ -437,7 +506,7 @@ export default function AdminPage() {
                   tool="profileBranding"
                   permissions={profilePermissions}
                   entry={entry}
-                  disabled={isBusy}
+                  disabled={isBusy || isUserRole}
                   onToggle={togglePermission}
                   onEnableAll={() => setAllPermissionsForTool(entry, 'profileBranding', true)}
                   onDisableAll={() => setAllPermissionsForTool(entry, 'profileBranding', false)}
@@ -448,7 +517,7 @@ export default function AdminPage() {
                   tool="aiInterview"
                   permissions={aiPermissions}
                   entry={entry}
-                  disabled={isBusy}
+                  disabled={isBusy || isUserRole}
                   onToggle={togglePermission}
                   onEnableAll={() => setAllPermissionsForTool(entry, 'aiInterview', true)}
                   onDisableAll={() => setAllPermissionsForTool(entry, 'aiInterview', false)}
@@ -652,6 +721,7 @@ function ScoreBreakdown({ scores }) {
 
 function RoleBadge({ role }) {
   const isAdmin = role === 'admin';
+  const isUser = role === 'user';
   return (
     <span style={{
       fontSize: 11,
@@ -659,8 +729,10 @@ function RoleBadge({ role }) {
       borderRadius: 999,
       textTransform: 'uppercase',
       letterSpacing: '0.05em',
-      background: isAdmin ? 'var(--accent-dim)' : 'var(--gold-dim)',
-      color: isAdmin ? 'var(--accent)' : 'var(--gold)',
+      background: isAdmin
+        ? 'var(--accent-dim)'
+        : (isUser ? 'rgba(22, 54, 106, 0.12)' : 'var(--gold-dim)'),
+      color: isAdmin ? 'var(--accent)' : (isUser ? 'var(--navy)' : 'var(--gold)'),
       fontWeight: 700
     }}>
       {role || 'user'}

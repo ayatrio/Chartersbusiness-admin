@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   getUsers,
   updatePermissions,
+  elevateUserToCandidate,
   deleteCandidate,
   getJobs,
   getJobById,
@@ -30,6 +31,7 @@ router.use(protect, requireAdmin);
 
 router.get('/users', getUsers);
 router.patch('/users/:id/permissions', updatePermissions);
+router.patch('/users/:id/elevate-candidate', elevateUserToCandidate);
 router.delete('/users/:id', deleteCandidate);
 
 router.get('/jobs', getJobs);

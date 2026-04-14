@@ -18,6 +18,7 @@ const NETWORK_FALLBACK_CODES = new Set([
   'ECONNABORTED',
   'ECONNRESET',
 ]);
+const ACCESS_USER_CATEGORIES = new Set(['user', 'candidate']);
 
 const readBoolean = (value, fallback = false) => {
   if (value === undefined || value === null || String(value).trim() === '') {
@@ -106,9 +107,19 @@ const deepMerge = (target, source) => {
   return output;
 };
 
-const mapLocalUserRole = (role) => (
-  String(role || '').toLowerCase() === 'admin' ? 'admin' : 'candidate'
-);
+const mapLocalUserRole = (role) => {
+  const normalized = String(role || '').toLowerCase();
+
+  if (normalized === 'admin' || normalized === 'recruiter') {
+    return 'admin';
+  }
+
+  if (normalized === 'candidate') {
+    return 'candidate';
+  }
+
+  return 'user';
+};
 
 const mapLocalUserStatus = (isActive) => (isActive === false ? 'disabled' : 'active');
 
@@ -123,6 +134,39 @@ const splitName = (value) => {
     firstName: firstName || '',
     lastName: rest.join(' '),
   };
+};
+
+const hasEnabledPermissions = (permissions = {}) => {
+  const profile = permissions?.profileBranding || {};
+  const interview = permissions?.aiInterview || {};
+  return (
+    Object.values(profile).some(Boolean) ||
+    Object.values(interview).some(Boolean)
+  );
+};
+
+const normalizeUserCategory = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ACCESS_USER_CATEGORIES.has(normalized) ? normalized : null;
+};
+
+const resolveDisplayRole = (sourceRole, access = null) => {
+  const normalizedSourceRole = String(sourceRole || '').trim().toLowerCase();
+
+  if (normalizedSourceRole === 'admin' || normalizedSourceRole === 'recruiter') {
+    return 'admin';
+  }
+
+  if (normalizedSourceRole === 'candidate') {
+    return 'candidate';
+  }
+
+  const explicitCategory = normalizeUserCategory(access?.userCategory);
+  if (explicitCategory) {
+    return explicitCategory;
+  }
+
+  return hasEnabledPermissions(access?.permissions) ? 'candidate' : 'user';
 };
 
 const toLocalCandidateShape = (userDoc) => {
@@ -170,7 +214,8 @@ const toMirroredCandidateShape = ({ chartersUserId, link, access, localUser }) =
     email: localUser?.email || link?.email || null,
     phoneNumber: localUser?.phone || link?.phone || null,
     courseInterestedIn: localUser?.selectedCourse || null,
-    role: mapLocalUserRole(localUser?.role),
+    role: resolveDisplayRole(localUser?.role || 'user', access),
+    userCategory: normalizeUserCategory(access?.userCategory) || null,
     status,
     isActive: status === 'active',
     createdAt: localUser?.createdAt || link?.createdAt || null,
@@ -244,7 +289,8 @@ const getMirroredUsersForAdmin = async () => {
       lastName: names.lastName,
       email: link.email || null,
       phone: link.phone || null,
-      role: mapLocalUserRole(localUser?.role),
+      role: resolveDisplayRole(localUser?.role || 'user', access),
+      userCategory: normalizeUserCategory(access?.userCategory) || null,
       status,
       isActive: status === 'active',
       permissions: normalizePermissions(access?.permissions || {}),
@@ -293,6 +339,7 @@ const getLocalUsersForAdmin = async () => {
       email: baseCandidate.email,
       phone: baseCandidate.phoneNumber,
       role: baseCandidate.role,
+      userCategory: normalizeUserCategory(access?.userCategory) || null,
       status,
       isActive: status === 'active',
       permissions: mergedPermissions,
@@ -397,6 +444,7 @@ const ensureCandidateLink = async (candidate) => {
 const shapeAdminUser = ({ candidate, link, access, profile }) => {
   const mergedPermissions = normalizePermissions(access?.permissions || {});
   const status = normalizeCandidateStatus(candidate);
+  const role = resolveDisplayRole(candidate?.role, access);
 
   return {
     _id: String(candidate._id),
@@ -407,7 +455,8 @@ const shapeAdminUser = ({ candidate, link, access, profile }) => {
     lastName: candidate.lastName || '',
     email: candidate.email || link?.email || null,
     phone: candidate.phoneNumber || link?.phone || null,
-    role: 'candidate',
+    role,
+    userCategory: normalizeUserCategory(access?.userCategory) || null,
     status,
     isActive: status === 'active',
     permissions: mergedPermissions,
@@ -571,12 +620,109 @@ exports.updatePermissions = async (req, res, next) => {
       user: {
         _id: chartersUserId,
         chartersUserId,
+        role: resolveDisplayRole(candidate?.role, updated),
+        userCategory: normalizeUserCategory(updated?.userCategory) || null,
         permissions: updated.permissions,
         status: candidate?.status || null,
       },
     });
   } catch (error) {
     next(error);
+  }
+};
+
+exports.elevateUserToCandidate = async (req, res, next) => {
+  try {
+    const { id: chartersUserId } = req.params;
+
+    let candidate = null;
+    let usedLocalFallback = false;
+
+    try {
+      candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
+    } catch (error) {
+      if (!shouldFallbackToLocal(error, { allowRateLimitedFallback: true })) {
+        throw error;
+      }
+
+      const localUser = await User.findById(chartersUserId)
+        .select('email firstName lastName phone selectedCourse role permissions permissionsVersion isActive createdAt updatedAt lastLogin');
+
+      if (!localUser) {
+        const mirroredCandidate = await getMirroredCandidateById(chartersUserId);
+        if (!mirroredCandidate) {
+          return res.status(404).json({
+            success: false,
+            message: 'User not found',
+          });
+        }
+
+        candidate = mirroredCandidate;
+        usedLocalFallback = true;
+      } else {
+        candidate = toLocalCandidateShape(localUser);
+        usedLocalFallback = true;
+      }
+    }
+
+    const existing = await CandidateAccess.findOne({ chartersUserId });
+    const existingPermissions = normalizePermissions(existing?.permissions || {});
+
+    const updated = await CandidateAccess.findOneAndUpdate(
+      { chartersUserId },
+      {
+        $set: {
+          userCategory: 'candidate',
+          permissions: existingPermissions,
+          status: candidate?.status || existing?.status || 'active',
+          updatedBy: req.user.chartersUserId || String(req.user._id),
+          updatedAt: new Date(),
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+      }
+    );
+
+    if (usedLocalFallback) {
+      const localUser = await User.findById(chartersUserId).select('role permissionsVersion');
+      if (localUser && String(localUser.role || '').toLowerCase() !== 'admin') {
+        localUser.role = 'candidate';
+        localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
+        await localUser.save();
+      }
+    }
+
+    await writeAuditLog({
+      req,
+      actionType: 'ROLE_UPDATE',
+      action: 'user.elevated_to_candidate',
+      targetChartersUserId: chartersUserId,
+      before: {
+        role: resolveDisplayRole(candidate?.role, existing),
+        userCategory: normalizeUserCategory(existing?.userCategory) || null,
+      },
+      after: {
+        role: 'candidate',
+        userCategory: 'candidate',
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'User elevated to candidate successfully',
+      user: {
+        _id: chartersUserId,
+        chartersUserId,
+        role: 'candidate',
+        userCategory: 'candidate',
+        permissions: updated.permissions,
+        status: candidate?.status || updated?.status || 'active',
+      },
+    });
+  } catch (error) {
+    return next(error);
   }
 };
 
@@ -687,6 +833,8 @@ exports.getPermissions = async (req, res, next) => {
     res.status(200).json({
       success: true,
       chartersUserId,
+      role: resolveDisplayRole(candidate?.role || 'user', access),
+      userCategory: normalizeUserCategory(access?.userCategory) || null,
       status: candidate?.status || null,
       permissions: normalizePermissions(access?.permissions || {}),
     });

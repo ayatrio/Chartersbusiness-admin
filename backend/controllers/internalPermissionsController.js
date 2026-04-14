@@ -10,6 +10,7 @@ exports.getInternalPermissions = async (req, res, next) => {
       success: true,
       chartersUserId,
       permissions: normalizePermissions(access?.permissions || {}),
+      userCategory: access?.userCategory || null,
       mirrorStatus: access?.status || null,
       source: 'profile-branding-metadata',
       updatedAt: access?.updatedAt || null,

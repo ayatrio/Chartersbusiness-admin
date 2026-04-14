@@ -14,6 +14,12 @@ const candidateAccessSchema = new mongoose.Schema(
       type: Object,
       default: cloneDefaultPermissions,
     },
+    userCategory: {
+      type: String,
+      enum: ['user', 'candidate'],
+      default: 'user',
+      index: true,
+    },
     status: {
       type: String,
       enum: ['active', 'disabled', 'blocked'],
