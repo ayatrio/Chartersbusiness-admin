@@ -37,6 +37,7 @@ const isLocalFallbackEnabled = () => readBoolean(
 
 const shouldFallbackToLocal = (error, options = {}) => {
   const allowRateLimitedFallback = Boolean(options.allowRateLimitedFallback);
+  const forceUpstreamFallback = Boolean(options.forceUpstreamFallback);
   const status = error?.status || error?.response?.status || null;
   const code = String(error?.code || '').toUpperCase();
   const message = String(
@@ -44,27 +45,31 @@ const shouldFallbackToLocal = (error, options = {}) => {
     error?.response?.data?.message ||
     ''
   ).toLowerCase();
+  const isUpstreamUnavailable = (
+    error?.isNetworkError ||
+    NETWORK_FALLBACK_CODES.has(code) ||
+    status === 404 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    message.includes('route not found') ||
+    message.includes('upstream') ||
+    message.includes('service unavailable')
+  );
 
   // Always allow read-fallback for upstream throttling to keep admin list usable.
   if (status === 429 && allowRateLimitedFallback) {
     return true;
   }
 
+  // Writes can explicitly force fallback when upstream candidate lookup is unavailable.
+  if (forceUpstreamFallback && isUpstreamUnavailable) {
+    return true;
+  }
+
   if (!isLocalFallbackEnabled()) return false;
 
-  if (error?.isNetworkError || NETWORK_FALLBACK_CODES.has(code)) {
-    return true;
-  }
-
-  if (status === 404 || status === 502 || status === 503 || status === 504) {
-    return true;
-  }
-
-  return (
-    message.includes('route not found') ||
-    message.includes('upstream') ||
-    message.includes('service unavailable')
-  );
+  return isUpstreamUnavailable;
 };
 
 const mapProfileScores = (profile) => {
@@ -648,7 +653,10 @@ exports.getUsers = async (req, res, next) => {
     try {
       payload = await chartersAdminService.getCandidates(getServiceActor(req), req.query || {});
     } catch (error) {
-      if (!shouldFallbackToLocal(error, { allowRateLimitedFallback: true })) {
+      if (!shouldFallbackToLocal(error, {
+        allowRateLimitedFallback: true,
+        forceUpstreamFallback: true,
+      })) {
         throw error;
       }
 
@@ -747,7 +755,10 @@ exports.updatePermissions = async (req, res, next) => {
     try {
       candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
     } catch (error) {
-      if (!shouldFallbackToLocal(error, { allowRateLimitedFallback: true })) {
+      if (!shouldFallbackToLocal(error, {
+        allowRateLimitedFallback: true,
+        forceUpstreamFallback: true,
+      })) {
         throw error;
       }
 
@@ -844,7 +855,10 @@ exports.elevateUserToCandidate = async (req, res, next) => {
     try {
       candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
     } catch (error) {
-      if (!shouldFallbackToLocal(error, { allowRateLimitedFallback: true })) {
+      if (!shouldFallbackToLocal(error, {
+        allowRateLimitedFallback: true,
+        forceUpstreamFallback: true,
+      })) {
         throw error;
       }
 
@@ -956,7 +970,7 @@ exports.deleteCandidate = async (req, res, next) => {
         chartersUserId
       );
     } catch (error) {
-      if (!shouldFallbackToLocal(error)) {
+      if (!shouldFallbackToLocal(error, { forceUpstreamFallback: true })) {
         throw error;
       }
 
@@ -1027,7 +1041,10 @@ exports.getPermissions = async (req, res, next) => {
     try {
       candidate = await chartersAdminService.getCandidateById(getServiceActor(req), chartersUserId);
     } catch (error) {
-      if (!shouldFallbackToLocal(error, { allowRateLimitedFallback: true })) {
+      if (!shouldFallbackToLocal(error, {
+        allowRateLimitedFallback: true,
+        forceUpstreamFallback: true,
+      })) {
         throw error;
       }
 
