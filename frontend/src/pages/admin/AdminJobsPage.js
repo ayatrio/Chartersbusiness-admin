@@ -69,7 +69,7 @@ export default function AdminJobsPage() {
         <Card hover={false}>
           <p style={{ color: 'var(--red)', marginBottom: 10 }}>{error}</p>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-            If this backend does not expose recruitment endpoints yet, the admin jobs module will remain unavailable until those routes are added.
+            This usually means the admin backend cannot authenticate with the Charters API or the upstream jobs route contract is misaligned.
           </p>
         </Card>
       ) : jobs.length === 0 ? (
@@ -183,4 +183,5 @@ const linkButtonStyle = {
   ...iconButtonStyle,
   textDecoration: 'none'
 };
+
 

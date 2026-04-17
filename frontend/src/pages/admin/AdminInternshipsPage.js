@@ -68,7 +68,7 @@ export default function AdminInternshipsPage() {
         <Card hover={false}>
           <p style={{ color: 'var(--red)', marginBottom: 10 }}>{error}</p>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-            If this backend does not expose recruitment endpoints yet, the internships module will remain unavailable until those routes are added.
+            This usually means the admin backend cannot authenticate with the Charters API or the upstream internship route contract is misaligned.
           </p>
         </Card>
       ) : internships.length === 0 ? (
@@ -182,4 +182,5 @@ const linkButtonStyle = {
   ...iconButtonStyle,
   textDecoration: 'none'
 };
+
 
