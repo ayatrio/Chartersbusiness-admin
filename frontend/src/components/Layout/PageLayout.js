@@ -23,7 +23,7 @@ export default function PageLayout({ children, title, subtitle, actions, fullWid
           WebkitBackdropFilter: 'blur(18px)',
           borderTop: '3px solid var(--accent)',
           borderBottom: '1px solid var(--border)',
-          boxShadow: '0 4px 18px rgba(22, 37, 61, 0.05)'
+          boxShadow: 'none'
         }}
       >
         <div
@@ -66,38 +66,22 @@ export default function PageLayout({ children, title, subtitle, actions, fullWid
             )}
 
             {/* 🔥 Home Button */}
-            <button
-              onClick={() => navigate(homeRoute)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: '#fff',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              {user?.role === 'admin' ? 'Admin Home' : 'Dashboard'}
-            </button>
-
-            {/* 🔥 Logout */}
-            <button
-              onClick={() => {
-                logout();
-                navigate('/login');
-              }}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: '#fff',
-                fontSize: 12,
-                cursor: 'pointer'
-              }}
-            >
-              Logout
-            </button>
+            {user?.role !== 'user' && (
+              <button
+                onClick={() => navigate(homeRoute)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: '#fff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {user?.role === 'admin' ? 'Admin Home' : 'Dashboard'}
+              </button>
+            )}
 
             {/* USER CARD */}
             <div
