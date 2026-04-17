@@ -4,25 +4,32 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Pages
-import LoginPage       from './pages/LoginPage';
-import RegisterPage    from './pages/RegisterPage';
-import DashboardPage   from './pages/DashboardPage'; // Profile Branding (existing)
-import DashboardHome   from './pages/DashboardHome'; // 🔥 NEW MAIN DASHBOARD
-import LinkedInPage    from './pages/LinkedInPage';
-import GitHubPage      from './pages/GitHubPage';
-import YouTubePage     from './pages/YouTubePage';
-import WebsitePage     from './pages/WebsitePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import DashboardPage from './pages/DashboardPage'; // Profile Branding (existing)
+import DashboardHome from './pages/DashboardHome'; // 🔥 NEW MAIN DASHBOARD
+import LinkedInPage from './pages/LinkedInPage';
+import GitHubPage from './pages/GitHubPage';
+import YouTubePage from './pages/YouTubePage';
+import WebsitePage from './pages/WebsitePage';
 import CredentialsPage from './pages/CredentialsPage';
-import NetworkingPage  from './pages/NetworkingPage';
-import AIToolsPage     from './pages/AIToolsPage';
+import NetworkingPage from './pages/NetworkingPage';
+import AIToolsPage from './pages/AIToolsPage';
 import AIInterviewPage from './pages/AIInterviewPage';
-import AdminPage       from './pages/AdminPage';
+import AdminPage from './pages/AdminPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminJobsPage from './pages/admin/AdminJobsPage';
 import AdminInternshipsPage from './pages/admin/AdminInternshipsPage';
 import AdminJobFormPage from './pages/admin/AdminJobFormPage';
 import AdminInternshipFormPage from './pages/admin/AdminInternshipFormPage';
 import AdminApplicationsPage from './pages/admin/AdminApplicationsPage';
+
+// Additionals
+import ApplicationStatusPage from './pages/ApplicationStatusPage';
+import CounselingPage from './pages/CounselingPage';
+import ProfilePage from './pages/ProfilePage';
+import ContactPage from './pages/ContactPage';
+import DashboardOverview from './pages/DashboardOverview';
 
 const getDefaultRoute = (user) => (user?.role === 'admin' ? '/admin' : '/home');
 
@@ -109,6 +116,13 @@ function AppRoutes() {
       <Route path="/ai-tools" element={<ProtectedRoute><AIToolsPage /></ProtectedRoute>} />
       <Route path="/ai-interview" element={<ProtectedRoute><AIInterviewPage /></ProtectedRoute>} />
       <Route path="/ai-interview/:id" element={<ProtectedRoute><AIInterviewPage /></ProtectedRoute>} />
+
+      {/* Additionals */}
+      <Route path="/application-status" element={<ProtectedRoute><ApplicationStatusPage /></ProtectedRoute>} />
+      <Route path="/counseling" element={<ProtectedRoute><CounselingPage /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/contact" element={<ProtectedRoute><ContactPage /></ProtectedRoute>} />
+      <Route path="/dashboard-overview" element={<ProtectedRoute><DashboardOverview /></ProtectedRoute>} />
 
       {/* 🔥 ADMIN */}
       <Route

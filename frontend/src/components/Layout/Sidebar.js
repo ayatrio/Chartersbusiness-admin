@@ -6,18 +6,19 @@ import {
   RiGlobalLine, RiAwardLine, RiGroupLine, RiYoutubeLine,
   RiRobotLine, RiLogoutBoxLine, RiMenuFoldLine,
   RiMenuUnfoldLine, RiUser3Line, RiSettings3Line,
-  RiBriefcaseLine, RiBookOpenLine, RiLock2Line
+  RiBriefcaseLine, RiBookOpenLine, RiLock2Line,
+  RiFileList3Line, RiChatVoiceLine
 } from 'react-icons/ri';
 
 const PROFILE_NAV_ITEMS = [
-  { to: '/dashboard',   icon: RiDashboardLine,    label: 'Dashboard'    },
-  { to: '/linkedin',    icon: RiLinkedinBoxLine,   label: 'LinkedIn'     },
-  { to: '/github',      icon: RiGithubLine,        label: 'GitHub'       },
-  { to: '/youtube',     icon: RiYoutubeLine,       label: 'YouTube'      },
-  { to: '/website',     icon: RiGlobalLine,        label: 'Website'      },
-  { to: '/credentials', icon: RiAwardLine,         label: 'Credentials'  },
-  { to: '/networking',  icon: RiGroupLine,         label: 'Networking'   },
-  { to: '/ai-tools',    icon: RiRobotLine,         label: 'AI Tools'     }
+  { to: '/dashboard', icon: RiDashboardLine, label: 'Dashboard' },
+  { to: '/linkedin', icon: RiLinkedinBoxLine, label: 'LinkedIn' },
+  { to: '/github', icon: RiGithubLine, label: 'GitHub' },
+  { to: '/youtube', icon: RiYoutubeLine, label: 'YouTube' },
+  { to: '/website', icon: RiGlobalLine, label: 'Website' },
+  { to: '/credentials', icon: RiAwardLine, label: 'Credentials' },
+  { to: '/networking', icon: RiGroupLine, label: 'Networking' },
+  { to: '/ai-tools', icon: RiRobotLine, label: 'AI Tools' }
 ];
 
 const ADMIN_NAV_ITEMS = [
@@ -51,6 +52,9 @@ export default function Sidebar() {
   );
 
   const homeNavItems = [
+    { to: '/dashboard-overview', icon: RiDashboardLine, label: 'Dashboard' },
+    { to: '/counseling', icon: RiChatVoiceLine, label: 'Counseling' },
+    { to: '/profile', icon: RiUser3Line, label: 'Profile' },
     { to: '/home', icon: RiUser3Line, label: 'Account' },
     { to: '/dashboard', icon: RiDashboardLine, label: 'Profile Dashboard' },
     hasAiInterviewAccess

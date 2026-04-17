@@ -46,8 +46,8 @@ const aiInterviewRoutes = loadRouteModule('aiInterview', './routes/aiInterview')
 const app = express();
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://charters-business-admin.vercel.app',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
 ];
 const DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/charters-business-admin-[a-z0-9-]+\.vercel\.app$/i,
@@ -194,6 +194,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Routes
+const { exchangeCode } = require('./controllers/authController');
+app.post('/api/auth/exchange-code', exchangeCode);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/profile-branding', profileBrandingRoutes);
@@ -205,6 +208,17 @@ app.use('/api/permissions', permissionsRoutes);
 app.use('/api/internal/permissions', internalPermissionsRoutes);
 app.use("/api/internal/admin/jobs", jobPostingRoutes);
 app.use("/api/internal/admin/internships", internshipPostingRoutes);
+
+// User-facing and general routes
+const applicationRoutes = require('./routes/application.routes.js');
+const counselingRoutes = require('./routes/counseling.routes.js');
+const jobApplicationRoutes = require('./routes/jobApplication.routes.js');
+const meetingRoutes = require('./routes/meeting.routes.js');
+
+app.use('/api/applications', applicationRoutes);
+app.use('/api/counseling', counselingRoutes);
+app.use('/api/job-applications', jobApplicationRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 // Server start time for client-side restart detection
 const SERVER_START = new Date().toISOString();

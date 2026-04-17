@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
+console.log('DEBUG: Auth routes are being initialized');
 
 const {
   register,
   login,
   getMe,
   updateProfile,
-  changePassword
+  changePassword,
+  exchangeCode,
+  redirectCode
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
@@ -15,5 +18,6 @@ router.post('/login', login);
 router.get('/me', protect, getMe);
 router.put('/update-profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);
+router.post('/redirect-code', protect, redirectCode);
 
 module.exports = router;

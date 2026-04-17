@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/Admin');
+const Admin = require('../models/Admin');
+const UserModelRaw = require('../models/User.model');
+const UserModel = UserModelRaw.default || UserModelRaw;
 
 const ALLOWED_ADMIN_ROLES = new Set(['admin', 'recruiter']);
 
@@ -47,25 +49,31 @@ exports.protect = async (req, res, next) => {
       return next();
     }
 
-    const user = await User.findById(decoded.id);
+    // Attempt to find in Admin collection first
+    let admin = await Admin.findById(decoded.id);
+    
+    // If not found in Admin, try the User collection
+    if (!admin) {
+      admin = await UserModel.findById(decoded.id);
+    }
 
-    if (!user || !user.isActive) {
+    if (!admin || !admin.isActive) {
       return res.status(401).json({
         success: false,
-        message: 'User not valid',
+        message: 'Account not found or inactive.',
       });
     }
 
-    // Token invalidation check for local PB candidate users.
-    if (decoded.permissionsVersion !== user.permissionsVersion) {
+    // Token invalidation check for local PB candidate/user accounts.
+    // If it's a regular user, permissionsVersion might be undefined.
+    if (admin.permissionsVersion !== undefined && decoded.permissionsVersion !== admin.permissionsVersion) {
       return res.status(401).json({
         success: false,
         message: 'Session expired. Please login again.',
       });
     }
 
-    req.user = user;
-
+    req.user = admin;
     next();
   } catch (error) {
     return res.status(401).json({

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+
 import api from '../services/api';
 
 const AuthContext = createContext(null);
@@ -14,8 +15,11 @@ const clearSessionToken = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+  const [applications, setApplications] = useState([]);
+  const [counselings, setCounselings] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isCodeExchanged, setIsCodeExchanged] = useState(false);
 
   // Decode JWT safely
   const decodeJwt = (token) => {
@@ -64,12 +68,43 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const exchangeCode = useCallback(async (code) => {
+    try {
+      const { data } = await api.post('/auth/exchange-code', { code });
+
+      const responseData = data?.data || data;
+      const token = responseData?.token;
+      const userData = responseData?.user;
+
+      if (token) {
+        setSessionToken(token);
+        if (userData) {
+          setUser(userData);
+          setLoading(false);
+        } else {
+          await fetchCurrentUser();
+        }
+      }
+
+      setIsCodeExchanged(true);
+      return data;
+    } catch (error) {
+      console.error('Code exchange failed:', error);
+      throw error;
+    }
+  }, []);
+
   // Initial session restore
   useEffect(() => {
     const token = sessionStorage.getItem('token');
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
 
     if (!token) {
-      setLoading(false);
+      // If there's no token and no code to exchange, we're definitely not logged in
+      if (!code) {
+        setLoading(false);
+      }
       return;
     }
 
@@ -115,6 +150,24 @@ export const AuthProvider = ({ children }) => {
 
     checkServer();
   }, []);
+
+  // Handle automatic code exchange if 'code' is present in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+
+    if (code && !isCodeExchanged) {
+      exchangeCode(code)
+        .catch((err) => {
+          console.error('Auto code exchange failed:', err);
+          setLoading(false); // Ensure loading stops even on failure
+        });
+
+      // Optional: Clean up URL after capturing the code
+      const newUrl = window.location.pathname + window.location.search.replace(/[?&]code=[^&]+/, '').replace(/^&/, '?');
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, [exchangeCode, isCodeExchanged]);
 
   // LOGIN
   const login = async (email, password) => {
@@ -179,6 +232,38 @@ export const AuthProvider = ({ children }) => {
     setUser(updatedUser);
   };
 
+  const refreshApplications = useCallback(async () => {
+    const token = sessionStorage.getItem('token');
+    if (!token) return;
+    try {
+      const { data } = await api.get('/applications/user');
+      if (data?.data) setApplications(data.data);
+    } catch (error) {
+      console.error('Error fetching applications:', error);
+    }
+  }, []);
+
+  const refreshCounselings = useCallback(async () => {
+    const token = sessionStorage.getItem('token');
+    if (!token) return;
+    try {
+      const { data } = await api.get('/counseling/user');
+      if (data?.data) setCounselings(data.data);
+    } catch (error) {
+      console.error('Error fetching counselings:', error);
+    }
+  }, []);
+
+  const generateRedirectCode = async () => {
+    try {
+      const { data } = await api.post('/auth/redirect-code');
+      return data?.data?.code || null;
+    } catch (error) {
+      console.error('Failed to generate redirect code:', error);
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -190,6 +275,13 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         updateUser,
+        applications,
+        counselings,
+        refreshApplications,
+        refreshCounselings,
+        exchangeCode,
+        isCodeExchanged,
+        generateRedirectCode,
       }}
     >
       {children}
@@ -202,4 +294,3 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 };
-
