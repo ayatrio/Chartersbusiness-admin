@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const RETRYABLE_METHODS = new Set(['get', 'head', 'options']);
 const ALLOWED_ACTING_ROLES = new Set(['admin', 'recruiter']);
 const PROD_CHARTERS_BASE_URLS = [
-  'https://charters-business.onrender.com',
+  process.env.MAIN_APP_BACKEND_URL || 'https://charters-business.onrender.com',
 ];
 const LOCAL_CHARTERS_BASE_URL = 'http://localhost:5000';
 const DEFAULT_LOGIN_PATHS = ['/api/v1/auth/login', '/api/auth/login'];

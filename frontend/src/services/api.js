@@ -1,8 +1,16 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const HOSTED_API_BASE_URL = 'https://charters-business-admin.onrender.com/api';
+const HOSTED_API_BASE_URL = process.env.REACT_APP_API_URL || 'https://charters-business-admin.onrender.com/api';
 const LOCAL_API_BASE_URL = 'http://localhost:5000/api';
+
+/**
+ * The URL of the main Charter Business application where SSO redirects lead.
+ */
+export const MAIN_APP_URL = (typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+    ? 'http://localhost:3000'
+    : (process.env.REACT_APP_MAIN_APP_URL || 'https://charters-business.vercel.app');
 
 const resolveApiBaseUrl = () => {
   if (typeof window !== 'undefined') {
@@ -12,12 +20,7 @@ const resolveApiBaseUrl = () => {
     }
   }
 
-  const configuredBaseUrl = String(process.env.REACT_APP_API_URL || '').trim();
-  if (configuredBaseUrl) {
-    return configuredBaseUrl.replace(/\/$/, '');
-  }
-
-  return HOSTED_API_BASE_URL;
+  return HOSTED_API_BASE_URL.replace(/\/$/, '');
 };
 
 const api = axios.create({

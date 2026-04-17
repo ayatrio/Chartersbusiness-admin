@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import BrandMark from '../Common/BrandMark';
 
-export default function PageLayout({ children, title, subtitle, actions }) {
+export default function PageLayout({ children, title, subtitle, actions, fullWidth = false }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const homeRoute = user?.role === 'admin' ? '/admin' : '/home';
@@ -173,12 +173,12 @@ export default function PageLayout({ children, title, subtitle, actions }) {
         <main
           style={{
             flex: 1,
-            padding: '34px 36px 52px',
+            padding: fullWidth ? 0 : '34px 36px 52px',
             overflowY: 'auto',
             maxWidth: '100%'
           }}
         >
-          <div style={{ maxWidth: 1380, margin: '0 auto' }}>
+          <div style={fullWidth ? { width: '100%' } : { maxWidth: 1380, margin: '0 auto' }}>
             
             {/* PAGE HEADER */}
             {title && (
@@ -193,18 +193,7 @@ export default function PageLayout({ children, title, subtitle, actions }) {
                 }}
               >
                 <div>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      letterSpacing: '0.12em',
-                      textTransform: 'uppercase',
-                      color: 'var(--accent)',
-                      marginBottom: 10
-                    }}
-                  >
-                    Profile Branding
-                  </p>
+                  {/* Category Label removed as per request */}
 
                   <h1
                     style={{
