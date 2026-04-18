@@ -17,7 +17,7 @@ router.post(
 );
 
 router.get(
-  "/my/postings",
+  ["/my-postings", "/my/postings"],
   requireInternalService,
   verifyRequiredActingToken,
   internshipPostingController.getMyInternshipPostings
@@ -61,3 +61,4 @@ router.get(
 );
 
 module.exports = router;
+
