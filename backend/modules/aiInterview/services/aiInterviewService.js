@@ -395,6 +395,10 @@ const aiInterviewService = {
     const apiKey = normalizeText(process.env.LIVEKIT_API_KEY);
     const apiSecret = normalizeText(process.env.LIVEKIT_API_SECRET);
 
+    console.log('LIVEKIT_URL:', process.env.LIVEKIT_URL);
+    console.log('LIVEKIT_API_KEY:', process.env.LIVEKIT_API_KEY);
+    console.log('LIVEKIT_API_SECRET:', process.env.LIVEKIT_API_SECRET?.slice(0, 5));
+
     if (!livekitUrl || !apiKey || !apiSecret) {
       const error = new Error(
         'LiveKit is not configured. Add LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET in backend/.env.'
