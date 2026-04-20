@@ -28,14 +28,52 @@ const api = axios.create({
   timeout: 30000
 });
 
+const readSessionToken = () => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    return String(sessionStorage.getItem('token') || '').trim();
+  } catch {
+    return '';
+  }
+};
+
+export const setApiAuthToken = (token) => {
+  const normalized = String(token || '').trim();
+
+  if (!normalized) {
+    delete api.defaults.headers.common.Authorization;
+    return;
+  }
+
+  api.defaults.headers.common.Authorization = `Bearer ${normalized}`;
+};
+
+export const clearApiAuthToken = () => {
+  delete api.defaults.headers.common.Authorization;
+};
+
+const bootToken = readSessionToken();
+if (bootToken) {
+  setApiAuthToken(bootToken);
+}
+
 // Request interceptor â€” attach token
 api.interceptors.request.use(
   (config) => {
-    // Only use sessionStorage for auth token (cleared when tab is closed).
-    const token = (typeof window !== 'undefined' && sessionStorage.getItem('token'));
+    const existingAuthHeader = config.headers?.Authorization || config.headers?.authorization;
+    if (existingAuthHeader) {
+      return config;
+    }
+
+    const token = readSessionToken();
     if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -47,12 +85,13 @@ api.interceptors.response.use(
   (error) => {
     const message = error.response?.data?.message || 'Something went wrong';
     const requestUrl = error.config?.url || '';
+    const skipAuthRedirect = Boolean(error.config?.skipAuthRedirect);
 
-    const isAuthRequest = ['/auth/login', '/auth/register', '/admin/auth/login'].some((path) => requestUrl.includes(path));
+    const isAuthRequest = ['/auth/login', '/auth/register', '/admin/auth/login', '/auth/exchange-code'].some((path) => requestUrl.includes(path));
 
-    if (error.response?.status === 401 && !isAuthRequest) {
+    if (error.response?.status === 401 && !isAuthRequest && !skipAuthRedirect) {
       sessionStorage.removeItem('token');
-      delete api.defaults.headers.common['Authorization'];
+      clearApiAuthToken();
       window.location.href = '/login';
       return Promise.reject(error);
     }
@@ -349,4 +388,3 @@ export const recruitmentAdminService = {
     'Update application status endpoint is not available on this backend.'
   )
 };
-

@@ -18,6 +18,7 @@ exports.getInterviewToken = async (req, res, next) => {
     const roomId = req.query?.roomId || req.body?.roomId;
     const result = await aiInterviewService.createInterviewToken({
       roomId,
+      requestId: req.requestId,
       user: req.user,
     });
 
@@ -33,7 +34,10 @@ exports.getInterviewToken = async (req, res, next) => {
 exports.scoreLanguageChunk = async (req, res, next) => {
   try {
     const text = req.body?.text;
-    const result = await aiInterviewService.scoreLanguage({ text });
+    const result = await aiInterviewService.scoreLanguage({
+      text,
+      requestId: req.requestId,
+    });
 
     res.status(200).json({
       success: true,

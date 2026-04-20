@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-import api from '../services/api';
+import api, { clearApiAuthToken, setApiAuthToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
 const setSessionToken = (token) => {
   sessionStorage.setItem('token', token);
-  api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  setApiAuthToken(token);
 };
 
 const clearSessionToken = () => {
   sessionStorage.removeItem('token');
-  delete api.defaults.headers.common.Authorization;
+  clearApiAuthToken();
 };
 
 export const AuthProvider = ({ children }) => {
@@ -44,29 +44,64 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const getSessionContext = useCallback((token) => {
+    const decoded = decodeJwt(token);
+    const isExpired = !decoded?.exp || decoded.exp * 1000 < Date.now();
+    const isAdminToken = String(decoded?.tokenType || '').toLowerCase() === 'pb_admin';
+
+    return {
+      decoded,
+      isAdminToken,
+      isExpired,
+    };
+  }, []);
+
   // Fetch current user (admin route first, then candidate route)
-  const fetchCurrentUser = async () => {
+  const fetchCurrentUser = useCallback(async (token) => {
+    const activeToken = String(token || sessionStorage.getItem('token') || '').trim();
+    if (!activeToken) {
+      clearSessionToken();
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    setApiAuthToken(activeToken);
+
+    const { isAdminToken } = getSessionContext(activeToken);
+    const primaryPath = isAdminToken ? '/admin/auth/me' : '/auth/me';
+    const fallbackPath = isAdminToken ? '/auth/me' : '/admin/auth/me';
+
     try {
-      const adminRes = await api.get('/admin/auth/me');
-      if (adminRes?.data?.user) {
-        setUser(adminRes.data.user);
+      const { data } = await api.get(primaryPath, { skipAuthRedirect: true });
+      if (data?.user) {
+        setUser(data.user);
         setLoading(false);
         return;
       }
     } catch (error) {
-      // fall through to local auth/me
+      const status = error?.response?.status;
+      if (![401, 403, 404].includes(status)) {
+        throw error;
+      }
     }
 
     try {
-      const { data } = await api.get('/auth/me');
-      setUser(data.user);
+      const { data } = await api.get(fallbackPath, { skipAuthRedirect: true });
+      if (data?.user) {
+        setUser(data.user);
+        setLoading(false);
+        return;
+      }
+
+      throw new Error('User payload missing from auth response');
     } catch {
       clearSessionToken();
       setUser(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [getSessionContext]);
 
   const exchangeCode = useCallback(async (code) => {
     try {
@@ -82,7 +117,7 @@ export const AuthProvider = ({ children }) => {
           setUser(userData);
           setLoading(false);
         } else {
-          await fetchCurrentUser();
+          await fetchCurrentUser(token);
         }
       }
 
@@ -92,7 +127,7 @@ export const AuthProvider = ({ children }) => {
       console.error('Code exchange failed:', error);
       throw error;
     }
-  }, []);
+  }, [fetchCurrentUser]);
 
   // Initial session restore
   useEffect(() => {
@@ -109,22 +144,22 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const decoded = decodeJwt(token);
+      const { decoded, isExpired } = getSessionContext(token);
 
       // Invalid or expired token
-      if (!decoded || !decoded.exp || decoded.exp * 1000 < Date.now()) {
+      if (!decoded || isExpired) {
         clearSessionToken();
         setLoading(false);
         return;
       }
 
-      api.defaults.headers.common.Authorization = `Bearer ${token}`;
-      fetchCurrentUser();
+      setApiAuthToken(token);
+      fetchCurrentUser(token);
     } catch {
       clearSessionToken();
       setLoading(false);
     }
-  }, []);
+  }, [fetchCurrentUser, getSessionContext]);
 
   // Detect server restart (optional safety)
   useEffect(() => {

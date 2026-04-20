@@ -33,6 +33,28 @@ const normalizeText = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .trim();
 
+const maskValue = (value, visible = 4) => {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length <= visible) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, visible)}***`;
+};
+
+const logAiInterviewEvent = (type, details = {}) => {
+  console.log(JSON.stringify({
+    level: 'info',
+    type,
+    ...details,
+    timestamp: new Date().toISOString(),
+  }));
+};
+
 const LIVEKIT_VALIDATE_TIMEOUT_MS = 8000;
 
 const normalizeLiveKitHttpUrl = (wsUrl) => normalizeText(wsUrl)
@@ -382,7 +404,7 @@ const aiInterviewService = {
     };
   },
 
-  async createInterviewToken({ roomId, user }) {
+  async createInterviewToken({ roomId, requestId, user }) {
     if (!AccessToken) {
       const error = new Error(
         'LiveKit token service unavailable. Install backend dependency `livekit-server-sdk` and restart the server.'
@@ -395,11 +417,14 @@ const aiInterviewService = {
     const apiKey = normalizeText(process.env.LIVEKIT_API_KEY);
     const apiSecret = normalizeText(process.env.LIVEKIT_API_SECRET);
 
-    console.log('LIVEKIT_URL:', process.env.LIVEKIT_URL);
-    console.log('LIVEKIT_API_KEY:', process.env.LIVEKIT_API_KEY);
-    console.log('LIVEKIT_API_SECRET:', process.env.LIVEKIT_API_SECRET?.slice(0, 5));
-
     if (!livekitUrl || !apiKey || !apiSecret) {
+      logAiInterviewEvent('livekit_token_config_missing', {
+        requestId: requestId || null,
+        livekitUrlConfigured: Boolean(livekitUrl),
+        apiKeyConfigured: Boolean(apiKey),
+        apiSecretConfigured: Boolean(apiSecret),
+      });
+
       const error = new Error(
         'LiveKit is not configured. Add LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET in backend/.env.'
       );
@@ -424,8 +449,26 @@ const aiInterviewService = {
       canSubscribe: true,
     });
 
+    const jwt = await token.toJwt();
+
+    logAiInterviewEvent('livekit_token_issued', {
+      requestId: requestId || null,
+      livekitUrl,
+      apiKeyPrefix: maskValue(apiKey, 6),
+      apiSecretPrefix: maskValue(apiSecret, 5),
+      room,
+      identity,
+      actorRole: normalizeText(user?.role).toLowerCase() || null,
+      actorId: normalizeText(
+        user?.chartersUserId
+        || user?._id
+        || user?.email
+        || user?.id
+      ) || null,
+    });
+
     return {
-      token: await token.toJwt(),
+      token: jwt,
       wsUrl: livekitUrl,
       room,
       identity,
@@ -433,19 +476,48 @@ const aiInterviewService = {
     };
   },
 
-  async scoreLanguage({ text }) {
+  async scoreLanguage({ text, requestId } = {}) {
     const normalized = normalizeText(text);
+    const geminiConfigured = Boolean(
+      normalizeText(
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY
+        || process.env.GEMINI_API_KEY
+        || process.env.GOOGLE_API_KEY
+      )
+    );
+
     if (normalized.length < 10) {
+      logAiInterviewEvent('ai_interview_language_scored', {
+        requestId: requestId || null,
+        source: 'rule',
+        geminiConfigured,
+        textLength: normalized.length,
+      });
+
       return { ...SHORT_RESPONSE_SCORE, source: 'rule' };
     }
 
     const geminiScore = await requestGeminiLanguageScore(normalized);
     if (geminiScore) {
+      logAiInterviewEvent('ai_interview_language_scored', {
+        requestId: requestId || null,
+        source: 'gemini',
+        geminiConfigured,
+        textLength: normalized.length,
+      });
+
       return {
         ...normalizeLanguageScore(geminiScore, normalized),
         source: 'gemini',
       };
     }
+
+    logAiInterviewEvent('ai_interview_language_scored', {
+      requestId: requestId || null,
+      source: 'fallback',
+      geminiConfigured,
+      textLength: normalized.length,
+    });
 
     return {
       ...localLanguageScore(normalized),

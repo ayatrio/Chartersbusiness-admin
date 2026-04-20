@@ -12,7 +12,7 @@ import { aiInterviewService } from '../../../services/api';
 import FaceTracker from './FaceTracker';
 import { analyzeLanguageChunk, calculateFinalScore } from '../utils/scoring';
 
-const INITIAL_AI_PROMPT = 'Hello! Let\'s begin your interview. Could you start by introducing yourself?';
+const LOCAL_PRACTICE_PROMPT = 'Hello! Let\'s begin your interview. Could you start by introducing yourself?';
 
 const STATUS_META = {
   connecting: { label: 'Connecting', color: 'var(--orange)' },
@@ -30,6 +30,17 @@ const FALLBACK_FOLLOWUPS = [
 ];
 
 const clampPercent = (value) => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+const logLiveKitDebug = (event, details = {}) => {
+  console.info('[AIInterview][LiveKit]', event, details);
+};
+
+const readDisconnectReason = (reason) => {
+  if (reason === undefined || reason === null) {
+    return '';
+  }
+
+  return String(reason);
+};
 
 export default function InterviewRoom({
   interviewId,
@@ -43,6 +54,8 @@ export default function InterviewRoom({
   const transcriptRef = useRef(null);
   const remoteAudioHostRef = useRef(null);
   const remoteAudioElementsRef = useRef(new Map());
+  const disconnectingRef = useRef(false);
+  const localFallbackPromptInjectedRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(false);
@@ -51,9 +64,7 @@ export default function InterviewRoom({
   const [agentStatus, setAgentStatus] = useState('connecting');
   const [ending, setEnding] = useState(false);
 
-  const [transcript, setTranscript] = useState([
-    { speaker: 'ai', text: INITIAL_AI_PROMPT },
-  ]);
+  const [transcript, setTranscript] = useState([]);
   const [languageSnapshots, setLanguageSnapshots] = useState([]);
   const [bodySnapshots, setBodySnapshots] = useState([]);
   const [liveScore, setLiveScore] = useState({
@@ -127,26 +138,68 @@ export default function InterviewRoom({
     }));
   }, []);
 
+  const ensureLocalFallbackPrompt = useCallback(() => {
+    if (localFallbackPromptInjectedRef.current) {
+      return;
+    }
+
+    localFallbackPromptInjectedRef.current = true;
+    setTranscript((prev) => (
+      prev.length
+        ? prev
+        : [{ speaker: 'ai', text: LOCAL_PRACTICE_PROMPT }]
+    ));
+  }, []);
+
   const handleIncomingData = useCallback((dataBuffer) => {
     try {
       const message = JSON.parse(new TextDecoder().decode(dataBuffer));
 
       if (message?.type === 'transcript' && message?.text) {
-        setTranscript((prev) => [...prev, {
-          speaker: message.speaker === 'user' ? 'user' : 'ai',
+        const speaker = message.speaker === 'user' ? 'user' : 'ai';
+        const shouldReplaceFallbackPrompt = speaker === 'ai' && localFallbackPromptInjectedRef.current;
+        const nextEntry = {
+          speaker,
           text: String(message.text),
-        }]);
+        };
 
-        if (message.speaker === 'user' && String(message.text).trim().length > 20) {
-          handleLanguageScore(String(message.text));
+        setTranscript((prev) => (
+          shouldReplaceFallbackPrompt
+            && prev.length === 1
+            && prev[0]?.speaker === 'ai'
+            && prev[0]?.text === LOCAL_PRACTICE_PROMPT
+            ? [nextEntry]
+            : [...prev, nextEntry]
+        ));
+
+        if (speaker === 'ai') {
+          localFallbackPromptInjectedRef.current = false;
+        }
+
+        logLiveKitDebug('data-received', {
+          type: 'transcript',
+          speaker,
+          preview: nextEntry.text.slice(0, 80),
+        });
+
+        if (speaker === 'user' && nextEntry.text.trim().length > 20) {
+          handleLanguageScore(nextEntry.text);
         }
       }
 
       if (message?.type === 'agent_status' && STATUS_META[message.status]) {
+        logLiveKitDebug('data-received', {
+          type: 'agent_status',
+          status: message.status,
+        });
         setAgentStatus(message.status);
       }
 
       if (message?.type === 'voice_score') {
+        logLiveKitDebug('data-received', {
+          type: 'voice_score',
+          score: clampPercent(message.score),
+        });
         setLiveScore((prev) => ({
           ...prev,
           voice: clampPercent(message.score),
@@ -161,12 +214,16 @@ export default function InterviewRoom({
     let mounted = true;
 
     const connectToLiveKit = async () => {
+      disconnectingRef.current = false;
+      localFallbackPromptInjectedRef.current = false;
       setConnected(false);
       setFallbackMode(false);
       setConnectionError('');
       setAgentStatus('connecting');
+      setTranscript([]);
 
       try {
+        logLiveKitDebug('token-request-start', { interviewId });
         const { data } = await aiInterviewService.getToken(interviewId);
         const token = data?.token;
         const wsUrl = data?.wsUrl;
@@ -175,13 +232,79 @@ export default function InterviewRoom({
           throw new Error('Token response is incomplete');
         }
 
+        logLiveKitDebug('token-request-success', {
+          interviewId,
+          wsUrl,
+          room: data?.room,
+          identity: data?.identity,
+          expiresIn: data?.expiresIn,
+        });
+
         const livekitModule = await import('livekit-client');
         const { Room, RoomEvent, Track } = livekitModule;
         const room = new Room();
         roomRef.current = room;
 
+        room.on(RoomEvent.ConnectionStateChanged, (state) => {
+          logLiveKitDebug('connection-state-changed', {
+            state: String(state),
+            roomName: room.name || data?.room || '',
+          });
+        });
+        room.on(RoomEvent.SignalConnected, () => {
+          logLiveKitDebug('signal-connected', {
+            roomName: room.name || data?.room || '',
+          });
+        });
+        room.on(RoomEvent.Connected, () => {
+          logLiveKitDebug('room-connected', {
+            roomName: room.name || data?.room || '',
+            localParticipant: room.localParticipant?.identity || '',
+          });
+        });
+        room.on(RoomEvent.Reconnecting, () => {
+          logLiveKitDebug('room-reconnecting', {
+            roomName: room.name || data?.room || '',
+          });
+
+          if (mounted) {
+            setAgentStatus('connecting');
+            setConnectionError('Live interviewer connection is unstable. Attempting to reconnect...');
+          }
+        });
+        room.on(RoomEvent.Reconnected, () => {
+          logLiveKitDebug('room-reconnected', {
+            roomName: room.name || data?.room || '',
+          });
+
+          if (mounted) {
+            setAgentStatus('listening');
+            setConnectionError('');
+          }
+        });
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
+          logLiveKitDebug('participant-connected', {
+            identity: participant?.identity || '',
+            sid: participant?.sid || '',
+          });
+
+          if (mounted) {
+            setConnectionError('');
+          }
+        });
+        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+          logLiveKitDebug('participant-disconnected', {
+            identity: participant?.identity || '',
+            sid: participant?.sid || '',
+          });
+        });
         room.on(RoomEvent.DataReceived, handleIncomingData);
         room.on(RoomEvent.TrackSubscribed, (track) => {
+          logLiveKitDebug('track-subscribed', {
+            kind: track?.kind || '',
+            sid: track?.sid || '',
+          });
+
           if (track?.kind === Track.Kind.Audio) {
             const key = String(track?.sid || track?.mediaStreamTrack?.id || Date.now());
             const attachedElement = track.attach();
@@ -196,6 +319,11 @@ export default function InterviewRoom({
           }
         });
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
+          logLiveKitDebug('track-unsubscribed', {
+            kind: track?.kind || '',
+            sid: track?.sid || '',
+          });
+
           if (track?.kind !== Track.Kind.Audio) {
             return;
           }
@@ -220,13 +348,43 @@ export default function InterviewRoom({
             // Ignore detach cleanup errors.
           }
         });
-        room.on(RoomEvent.Disconnected, () => {
-          if (mounted) {
-            setConnected(false);
-          }
+        room.on(RoomEvent.Disconnected, (reason) => {
+          const reasonText = readDisconnectReason(reason);
+          logLiveKitDebug('room-disconnected', {
+            reason: reasonText || 'unknown',
+            roomName: room.name || data?.room || '',
+            localParticipant: room.localParticipant?.identity || '',
+          });
+
           detachRemoteAudioElements();
+
+          if (!mounted) {
+            return;
+          }
+
+          setConnected(false);
+
+          if (disconnectingRef.current) {
+            return;
+          }
+
+          setFallbackMode(true);
+          setConnected(true);
+          setAgentStatus('listening');
+          setLiveScore((prev) => ({ ...prev, voice: 0 }));
+          setConnectionError(
+            reasonText
+              ? `Disconnected from LiveKit room (${reasonText}). You can still run local practice mode below.`
+              : 'Disconnected from the LiveKit room. You can still run local practice mode below.'
+          );
+          ensureLocalFallbackPrompt();
+          void startLocalPreview();
         });
 
+        logLiveKitDebug('room-connect-start', {
+          wsUrl,
+          room: data?.room,
+        });
         await room.connect(wsUrl, token);
         await room.localParticipant.enableCameraAndMicrophone();
         await startLocalPreview();
@@ -238,6 +396,13 @@ export default function InterviewRoom({
         setConnected(true);
         setAgentStatus('listening');
       } catch (error) {
+        logLiveKitDebug('room-connect-failed', {
+          interviewId,
+          message: String(error?.message || ''),
+          status: error?.status || error?.response?.status || null,
+          details: String(error?.response?.data?.message || ''),
+        });
+
         if (!mounted) {
           return;
         }
@@ -265,6 +430,7 @@ export default function InterviewRoom({
             ? `${detailedMessage} You can still run local practice mode below.`
             : fallbackMessage
         );
+        ensureLocalFallbackPrompt();
         await startLocalPreview();
       }
     };
@@ -274,13 +440,14 @@ export default function InterviewRoom({
     return () => {
       mounted = false;
       if (roomRef.current) {
+        disconnectingRef.current = true;
         roomRef.current.disconnect();
         roomRef.current = null;
       }
       detachRemoteAudioElements();
       stopLocalPreview();
     };
-  }, [detachRemoteAudioElements, handleIncomingData, interviewId, startLocalPreview, stopLocalPreview]);
+  }, [detachRemoteAudioElements, ensureLocalFallbackPrompt, handleIncomingData, interviewId, startLocalPreview, stopLocalPreview]);
 
   const handleBodyScore = useCallback((snapshot) => {
     if (snapshot?.unavailable) {
@@ -314,6 +481,7 @@ export default function InterviewRoom({
     }
 
     setManualAnswer('');
+    localFallbackPromptInjectedRef.current = true;
     setTranscript((prev) => {
       const nextUserTurns = prev.filter((item) => item.speaker === 'user').length + 1;
       const followup = FALLBACK_FOLLOWUPS[Math.min(nextUserTurns - 1, FALLBACK_FOLLOWUPS.length - 1)];
@@ -329,6 +497,7 @@ export default function InterviewRoom({
     }
 
     setEnding(true);
+    disconnectingRef.current = true;
 
     try {
       if (roomRef.current) {
@@ -437,6 +606,12 @@ export default function InterviewRoom({
           )}
 
           <div ref={transcriptRef} className="ai-transcript-feed">
+            {transcript.length === 0 && (
+              <p className="ai-transcript-empty">
+                Waiting for the live interviewer transcript. If nothing appears, the voice agent may not have joined the room yet.
+              </p>
+            )}
+
             {transcript.map((entry, index) => (
               <div
                 key={`${entry.speaker}-${index}`}
@@ -597,6 +772,12 @@ export default function InterviewRoom({
           flex-direction: column;
           gap: 10px;
           margin-bottom: 12px;
+        }
+        .ai-transcript-empty {
+          margin: 0;
+          color: var(--text-muted);
+          font-size: 13px;
+          line-height: 1.6;
         }
         .ai-transcript-item {
           display: flex;
