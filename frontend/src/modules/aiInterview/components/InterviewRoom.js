@@ -56,6 +56,8 @@ export default function InterviewRoom({
   const remoteAudioElementsRef = useRef(new Map());
   const disconnectingRef = useRef(false);
   const localFallbackPromptInjectedRef = useRef(false);
+  const agentJoinedRef = useRef(false);
+  const agentJoinWarningTimerRef = useRef(null);
 
   const [connected, setConnected] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(false);
@@ -75,6 +77,13 @@ export default function InterviewRoom({
   const [manualAnswer, setManualAnswer] = useState('');
 
   const status = STATUS_META[agentStatus] || STATUS_META.connecting;
+
+  const clearAgentJoinWarningTimer = useCallback(() => {
+    if (agentJoinWarningTimerRef.current) {
+      window.clearTimeout(agentJoinWarningTimerRef.current);
+      agentJoinWarningTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (transcriptRef.current) {
@@ -216,6 +225,8 @@ export default function InterviewRoom({
     const connectToLiveKit = async () => {
       disconnectingRef.current = false;
       localFallbackPromptInjectedRef.current = false;
+      agentJoinedRef.current = false;
+      clearAgentJoinWarningTimer();
       setConnected(false);
       setFallbackMode(false);
       setConnectionError('');
@@ -238,7 +249,17 @@ export default function InterviewRoom({
           room: data?.room,
           identity: data?.identity,
           expiresIn: data?.expiresIn,
+          agentDispatch: data?.agentDispatch || null,
         });
+
+        if (data?.agentDispatch?.attempted && !data?.agentDispatch?.success) {
+          const dispatchMessage = String(data?.agentDispatch?.message || '').trim();
+          setConnectionError(
+            dispatchMessage
+              ? `${dispatchMessage} The room can still connect, but the live interviewer may not join until the Python agent worker is running with the same LIVEKIT_AGENT_NAME.`
+              : 'Live interviewer dispatch failed. The room can still connect, but the live interviewer may not join until the Python agent worker is running with the same LIVEKIT_AGENT_NAME.'
+          );
+        }
 
         const livekitModule = await import('livekit-client');
         const { Room, RoomEvent, Track } = livekitModule;
@@ -283,6 +304,8 @@ export default function InterviewRoom({
           }
         });
         room.on(RoomEvent.ParticipantConnected, (participant) => {
+          agentJoinedRef.current = true;
+          clearAgentJoinWarningTimer();
           logLiveKitDebug('participant-connected', {
             identity: participant?.identity || '',
             sid: participant?.sid || '',
@@ -356,6 +379,8 @@ export default function InterviewRoom({
             localParticipant: room.localParticipant?.identity || '',
           });
 
+          agentJoinedRef.current = false;
+          clearAgentJoinWarningTimer();
           detachRemoteAudioElements();
 
           if (!mounted) {
@@ -393,9 +418,26 @@ export default function InterviewRoom({
           return;
         }
 
+        agentJoinedRef.current = room.remoteParticipants.size > 0;
+        clearAgentJoinWarningTimer();
+        if (!agentJoinedRef.current) {
+          agentJoinWarningTimerRef.current = window.setTimeout(() => {
+            if (!mounted || disconnectingRef.current || agentJoinedRef.current) {
+              return;
+            }
+
+            setConnectionError((prev) => (
+              prev
+                || 'Connected to the LiveKit room, but the interviewer agent has not joined yet. Check the Python worker logs and confirm LIVEKIT_AGENT_NAME matches on both services.'
+            ));
+          }, 8000);
+        }
+
         setConnected(true);
         setAgentStatus('listening');
       } catch (error) {
+        agentJoinedRef.current = false;
+        clearAgentJoinWarningTimer();
         logLiveKitDebug('room-connect-failed', {
           interviewId,
           message: String(error?.message || ''),
@@ -439,6 +481,8 @@ export default function InterviewRoom({
 
     return () => {
       mounted = false;
+      agentJoinedRef.current = false;
+      clearAgentJoinWarningTimer();
       if (roomRef.current) {
         disconnectingRef.current = true;
         roomRef.current.disconnect();
@@ -447,7 +491,7 @@ export default function InterviewRoom({
       detachRemoteAudioElements();
       stopLocalPreview();
     };
-  }, [detachRemoteAudioElements, ensureLocalFallbackPrompt, handleIncomingData, interviewId, startLocalPreview, stopLocalPreview]);
+  }, [clearAgentJoinWarningTimer, detachRemoteAudioElements, ensureLocalFallbackPrompt, handleIncomingData, interviewId, startLocalPreview, stopLocalPreview]);
 
   const handleBodyScore = useCallback((snapshot) => {
     if (snapshot?.unavailable) {

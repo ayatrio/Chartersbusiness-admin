@@ -1,13 +1,16 @@
 const axios = require('axios');
 
 let AccessToken = null;
+let AgentDispatchClient = null;
 let livekitImportError = null;
 
 try {
-  ({ AccessToken } = require('livekit-server-sdk'));
+  ({ AccessToken, AgentDispatchClient } = require('livekit-server-sdk'));
 } catch (error) {
   livekitImportError = error;
 }
+
+const DEFAULT_LIVEKIT_AGENT_NAME = 'charters-ai-interviewer';
 
 const SHORT_RESPONSE_SCORE = Object.freeze({
   grammar: 50,
@@ -56,11 +59,15 @@ const logAiInterviewEvent = (type, details = {}) => {
 };
 
 const LIVEKIT_VALIDATE_TIMEOUT_MS = 8000;
+const LIVEKIT_AGENT_DISPATCH_TIMEOUT_MS = 8000;
 
 const normalizeLiveKitHttpUrl = (wsUrl) => normalizeText(wsUrl)
   .replace(/\/+$/, '')
   .replace(/^wss:\/\//i, 'https://')
   .replace(/^ws:\/\//i, 'http://');
+
+const resolveLiveKitAgentName = () => normalizeText(process.env.LIVEKIT_AGENT_NAME)
+  || DEFAULT_LIVEKIT_AGENT_NAME;
 
 const readLiveKitErrorMessage = (payload, status) => {
   if (payload && typeof payload === 'string') {
@@ -328,6 +335,141 @@ const buildIdentity = (user) => {
   return `${prefix}-${cleanedId}-${Date.now()}`;
 };
 
+const buildAgentDispatchMetadata = ({
+  normalizedRoomId,
+  room,
+  requestId,
+  user,
+}) => JSON.stringify({
+  module: 'aiInterview',
+  normalizedRoomId,
+  room,
+  requestId: requestId || null,
+  requestedBy: {
+    role: normalizeText(user?.role).toLowerCase() || null,
+    id: normalizeText(
+      user?.chartersUserId
+      || user?._id
+      || user?.email
+      || user?.id
+    ) || null,
+  },
+});
+
+const summarizeDispatch = (dispatch) => ({
+  id: normalizeText(dispatch?.id) || null,
+  agentName: normalizeText(dispatch?.agentName) || null,
+  room: normalizeText(dispatch?.room) || null,
+  activeJobs: Array.isArray(dispatch?.state?.jobs) ? dispatch.state.jobs.length : 0,
+});
+
+const dispatchInterviewAgent = async ({
+  room,
+  normalizedRoomId,
+  livekitUrl,
+  apiKey,
+  apiSecret,
+  requestId,
+  user,
+}) => {
+  const agentName = resolveLiveKitAgentName();
+
+  if (!AgentDispatchClient) {
+    const message = livekitImportError
+      ? `LiveKit AgentDispatchClient unavailable: ${livekitImportError.message}`
+      : 'LiveKit AgentDispatchClient unavailable in backend SDK.';
+
+    logAiInterviewEvent('livekit_agent_dispatch_unavailable', {
+      requestId: requestId || null,
+      room,
+      agentName,
+      message,
+    });
+
+    return {
+      attempted: false,
+      success: false,
+      reused: false,
+      agentName,
+      message,
+    };
+  }
+
+  try {
+    const client = new AgentDispatchClient(
+      normalizeLiveKitHttpUrl(livekitUrl),
+      apiKey,
+      apiSecret,
+      { requestTimeout: LIVEKIT_AGENT_DISPATCH_TIMEOUT_MS }
+    );
+
+    const existingDispatches = await client.listDispatch(room);
+    const existingDispatch = existingDispatches.find(
+      (dispatch) => normalizeText(dispatch?.agentName) === agentName
+    );
+
+    if (existingDispatch) {
+      const summary = summarizeDispatch(existingDispatch);
+      logAiInterviewEvent('livekit_agent_dispatch_reused', {
+        requestId: requestId || null,
+        ...summary,
+      });
+
+      return {
+        attempted: true,
+        success: true,
+        reused: true,
+        ...summary,
+        message: 'Existing LiveKit agent dispatch reused.',
+      };
+    }
+
+    const createdDispatch = await client.createDispatch(room, agentName, {
+      metadata: buildAgentDispatchMetadata({
+        normalizedRoomId,
+        room,
+        requestId,
+        user,
+      }),
+    });
+
+    const summary = summarizeDispatch(createdDispatch);
+    logAiInterviewEvent('livekit_agent_dispatch_created', {
+      requestId: requestId || null,
+      ...summary,
+    });
+
+    return {
+      attempted: true,
+      success: true,
+      reused: false,
+      ...summary,
+      message: 'LiveKit agent dispatch created.',
+    };
+  } catch (error) {
+    const message = normalizeText(
+      error?.response?.data?.message
+      || error?.response?.data?.error
+      || error?.message
+    ) || 'Failed to dispatch LiveKit agent.';
+
+    logAiInterviewEvent('livekit_agent_dispatch_failed', {
+      requestId: requestId || null,
+      room,
+      agentName,
+      message,
+    });
+
+    return {
+      attempted: true,
+      success: false,
+      reused: false,
+      agentName,
+      message,
+    };
+  }
+};
+
 const aiInterviewService = {
   async healthCheck({ user } = {}) {
     const livekitConfigured = Boolean(
@@ -360,6 +502,7 @@ const aiInterviewService = {
       try {
         const probeToken = await aiInterviewService.createInterviewToken({
           roomId: `health-${Date.now().toString(36)}`,
+          dispatchAgent: false,
           user: user || {
             role: 'admin',
             chartersUserId: 'health-check',
@@ -396,6 +539,8 @@ const aiInterviewService = {
         livekitSdkInstalled: Boolean(AccessToken),
         livekitConfigured,
         livekitTokenValidation,
+        livekitAgentDispatchAvailable: Boolean(AgentDispatchClient),
+        livekitAgentName: resolveLiveKitAgentName(),
         geminiConfigured,
         faceTrackingModelPath: '/face-api-models',
       },
@@ -404,7 +549,7 @@ const aiInterviewService = {
     };
   },
 
-  async createInterviewToken({ roomId, requestId, user }) {
+  async createInterviewToken({ roomId, requestId, user, dispatchAgent = true }) {
     if (!AccessToken) {
       const error = new Error(
         'LiveKit token service unavailable. Install backend dependency `livekit-server-sdk` and restart the server.'
@@ -450,6 +595,23 @@ const aiInterviewService = {
     });
 
     const jwt = await token.toJwt();
+    const agentDispatch = dispatchAgent
+      ? await dispatchInterviewAgent({
+        room,
+        normalizedRoomId,
+        livekitUrl,
+        apiKey,
+        apiSecret,
+        requestId,
+        user,
+      })
+      : {
+        attempted: false,
+        success: false,
+        reused: false,
+        agentName: resolveLiveKitAgentName(),
+        message: 'Dispatch skipped for this request.',
+      };
 
     logAiInterviewEvent('livekit_token_issued', {
       requestId: requestId || null,
@@ -465,6 +627,10 @@ const aiInterviewService = {
         || user?.email
         || user?.id
       ) || null,
+      agentDispatchStatus: agentDispatch.success
+        ? (agentDispatch.reused ? 'reused' : 'created')
+        : (agentDispatch.attempted ? 'failed' : 'skipped'),
+      agentName: agentDispatch.agentName || null,
     });
 
     return {
@@ -473,6 +639,7 @@ const aiInterviewService = {
       room,
       identity,
       expiresIn: '2h',
+      agentDispatch,
     };
   },
 
