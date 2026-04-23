@@ -116,6 +116,26 @@ const parseTrustProxy = (value) => {
   return value;
 };
 
+const sanitizeUrlForLog = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const parsed = new URL(raw);
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+  } catch (error) {
+    // fall through to the lightweight sanitization below
+  }
+
+  const withoutHash = raw.split('#')[0];
+  const withoutQuery = withoutHash.split('?')[0];
+  return withoutQuery || '/';
+};
+
 app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 
 // Establish the database connection before serving requests.
@@ -137,7 +157,7 @@ app.use((req, res, next) => {
       type: 'request',
       requestId: req.requestId || null,
       method: req.method,
-      path: req.originalUrl,
+      path: sanitizeUrlForLog(req.originalUrl || req.url || req.path),
       statusCode: res.statusCode,
       durationMs,
       timestamp: new Date().toISOString(),
@@ -154,7 +174,7 @@ app.use((req, res, next) => {
         reason: res.statusCode === 403 ? 'forbidden' : 'rate_limited',
         requestId: req.requestId || null,
         method: req.method,
-        path: req.originalUrl,
+        path: sanitizeUrlForLog(req.originalUrl || req.url || req.path),
         statusCode: res.statusCode,
         durationMs,
         timestamp: new Date().toISOString(),
@@ -163,13 +183,7 @@ app.use((req, res, next) => {
         retryAfter: res.getHeader('retry-after') || null,
         hasAuthorization: typeof req.headers.authorization === 'string',
         hasServiceKey: typeof req.headers['x-service-key'] === 'string',
-        serviceKeyId: req.headers['x-service-key-id'] || null,
         actorRole: req.user?.role || req.internalActor?.role || null,
-        actorId:
-          req.user?.chartersUserId ||
-          req.user?._id?.toString?.() ||
-          req.internalActor?.adminId ||
-          null,
       };
 
       console.warn(JSON.stringify(alertPayload));
@@ -252,12 +266,12 @@ app.use((err, req, res, next) => {
     type: 'request_error',
     requestId: req.requestId || null,
     method: req.method,
-    path: req.originalUrl,
+    path: sanitizeUrlForLog(req.originalUrl || req.url || req.path),
     statusCode,
     code: err.code || null,
     upstreamStatus: upstream.status || null,
     upstreamMethod: upstream.method || null,
-    upstreamUrl: upstream.url || null,
+    upstreamUrl: sanitizeUrlForLog(upstream.url),
     upstreamRetryAfter: upstream.retryAfter || null,
     message: err.message || 'Internal Server Error',
     timestamp: new Date().toISOString(),
@@ -333,7 +347,15 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
+  console.error(JSON.stringify({
+    level: 'error',
+    type: 'unhandled_rejection',
+    message: err?.message || 'Unhandled rejection',
+    code: err?.code || null,
+    statusCode: err?.status || err?.response?.status || null,
+    timestamp: new Date().toISOString(),
+    stack: process.env.NODE_ENV === 'development' ? err?.stack : undefined,
+  }));
   process.exit(1);
 });
 

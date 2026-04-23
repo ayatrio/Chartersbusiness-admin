@@ -6,6 +6,7 @@ import {
   RiStopCircleLine,
   RiTimerLine,
 } from 'react-icons/ri';
+import toast from 'react-hot-toast';
 import Card from '../../../components/Common/Card';
 import Button from '../../../components/Common/Button';
 import { aiInterviewService } from '../../../services/api';
@@ -13,6 +14,7 @@ import FaceTracker from './FaceTracker';
 import { analyzeLanguageChunk, calculateFinalScore } from '../utils/scoring';
 
 const LOCAL_PRACTICE_PROMPT = 'Hello! Let\'s begin your interview. Could you start by introducing yourself?';
+const AGENT_NOT_CONNECTED_MESSAGE = 'Interviewer unavailable right now. The AI agent did not join the room.';
 
 const STATUS_META = {
   connecting: { label: 'Connecting', color: 'var(--orange)' },
@@ -58,6 +60,7 @@ export default function InterviewRoom({
   const localFallbackPromptInjectedRef = useRef(false);
   const agentJoinedRef = useRef(false);
   const agentJoinWarningTimerRef = useRef(null);
+  const agentConnectionToastShownRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
   const [fallbackMode, setFallbackMode] = useState(false);
@@ -226,6 +229,7 @@ export default function InterviewRoom({
       disconnectingRef.current = false;
       localFallbackPromptInjectedRef.current = false;
       agentJoinedRef.current = false;
+      agentConnectionToastShownRef.current = false;
       clearAgentJoinWarningTimer();
       setConnected(false);
       setFallbackMode(false);
@@ -254,10 +258,14 @@ export default function InterviewRoom({
 
         if (data?.agentDispatch?.attempted && !data?.agentDispatch?.success) {
           const dispatchMessage = String(data?.agentDispatch?.message || '').trim();
+          if (!agentConnectionToastShownRef.current) {
+            agentConnectionToastShownRef.current = true;
+            toast.error(AGENT_NOT_CONNECTED_MESSAGE);
+          }
           setConnectionError(
             dispatchMessage
-              ? `${dispatchMessage} The room can still connect, but the live interviewer may not join until the Python agent worker is running with the same LIVEKIT_AGENT_NAME.`
-              : 'Live interviewer dispatch failed. The room can still connect, but the live interviewer may not join until the Python agent worker is running with the same LIVEKIT_AGENT_NAME.'
+              ? `${AGENT_NOT_CONNECTED_MESSAGE} ${dispatchMessage} The room can still connect, but the live interviewer may not join until the Python agent worker is running with the same LIVEKIT_AGENT_NAME.`
+              : `${AGENT_NOT_CONNECTED_MESSAGE} Live interviewer dispatch failed. The room can still connect, but the live interviewer may not join until the Python agent worker is running with the same LIVEKIT_AGENT_NAME.`
           );
         }
 
@@ -426,9 +434,13 @@ export default function InterviewRoom({
               return;
             }
 
+            if (!agentConnectionToastShownRef.current) {
+              agentConnectionToastShownRef.current = true;
+              toast.error(AGENT_NOT_CONNECTED_MESSAGE);
+            }
             setConnectionError((prev) => (
               prev
-                || 'Connected to the LiveKit room, but the interviewer agent has not joined yet. Check the Python worker logs and confirm LIVEKIT_AGENT_NAME matches on both services.'
+                || `${AGENT_NOT_CONNECTED_MESSAGE} Connected to the LiveKit room, but the interviewer agent has not joined yet. Check the Python worker logs and confirm LIVEKIT_AGENT_NAME matches on both services.`
             ));
           }, 8000);
         }

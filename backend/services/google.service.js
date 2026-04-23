@@ -59,15 +59,7 @@ const getTokensFromCode = async (code) => {
   oauth2Client.setCredentials(newTokens);
   tokens = newTokens;
 
-  console.log("✅ Google OAuth tokens obtained successfully");
-  console.log(
-    "📝 Access Token:",
-    newTokens.access_token?.substring(0, 20) + "...",
-  );
-  console.log(
-    "📝 Refresh Token:",
-    newTokens.refresh_token ? "Present" : "Not present",
-  );
+  console.log("Google OAuth tokens obtained successfully");
 
   return newTokens;
 };
@@ -151,8 +143,7 @@ const createCalendarEvent = async ({
       (e) => e.entryPointType === "video",
     )?.uri;
 
-    console.log("✅ Calendar event created:", response.data.htmlLink);
-    console.log("🔗 Meet Link:", meetLink);
+    console.log("Calendar event created successfully");
 
     return {
       eventId: response.data.id,
@@ -216,7 +207,7 @@ const disconnectOAuth = async () => {
     try {
       // Revoke the token with Google
       await oauth2Client.revokeToken(tokens.access_token);
-      console.log("✅ Google OAuth token revoked successfully");
+      console.log("Google OAuth token revoked successfully");
     } catch (error) {
       console.error("⚠️ Error revoking token:", error.message);
       // Continue anyway to clear local tokens
@@ -227,7 +218,7 @@ const disconnectOAuth = async () => {
   tokens = null;
   oauth2Client.setCredentials({});
 
-  console.log("✅ OAuth disconnected and tokens cleared");
+  console.log("OAuth disconnected and tokens cleared");
   return { success: true, message: "OAuth disconnected successfully" };
 };
 

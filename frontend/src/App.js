@@ -57,22 +57,8 @@ const AdminRoute = ({ children }) => {
 
 // 🔄 Loader
 const PageLoader = () => (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100vh',
-    background: 'var(--bg-primary)'
-  }}>
-    <div style={{
-      width: 40,
-      height: 40,
-      borderRadius: '50%',
-      border: '3px solid #eadfd6',
-      borderTopColor: 'var(--accent)',
-      animation: 'spin 0.8s linear infinite'
-    }} />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  <div className="page-loader">
+    <div className="page-loader__spinner" />
   </div>
 );
 
@@ -230,15 +216,7 @@ export default function App() {
         <Toaster
           position="top-right"
           toastOptions={{
-            style: {
-              background: 'rgba(255,255,255,0.96)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-md)',
-              fontFamily: 'var(--font-body)',
-              fontSize: '14px',
-              borderRadius: '14px'
-            },
+            className: 'app-toast',
             success: {
               iconTheme: {
                 primary: 'var(--green)',

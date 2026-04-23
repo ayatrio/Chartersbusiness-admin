@@ -73,7 +73,7 @@ function SkillTagger({ skills = [], onChange, maxSkills = 50, source = 'user' })
         {skills.map((skill, index) => (
           <div key={index} className={`skill-tag skill-tag-${skill.source}`} title={skill.source === 'auto' ? 'Auto-filled from LinkedIn' : 'User-entered'}>
             <span>{skill.name}</span>
-            <button onClick={() => handleRemoveSkill(index)} className="skill-remove-btn" type="button" aria-label="Remove skill">Ãƒâ€”</button>
+            <button onClick={() => handleRemoveSkill(index)} className="skill-remove-btn" type="button" aria-label="Remove skill">x</button>
             {skill.source === 'auto' && <span className="skill-source-badge">auto</span>}
           </div>
         ))}
@@ -192,14 +192,14 @@ function ExperienceForm({ experiences = [], onChange, maxExperiences = 20, sourc
           <div key={index} className={`experience-item experience-item-${exp.source}`}>
             <div className="exp-header">
               <h4>{exp.title}</h4>
-              <span className={`exp-source ${exp.source}`}>{exp.source === 'auto' ? 'Ã°Å¸â€â€” Auto-filled' : 'Ã¢Å“ÂÃ¯Â¸Â User-entered'}</span>
+              <span className={`exp-source ${exp.source}`}>{exp.source === 'auto' ? 'Auto-filled' : 'User-entered'}</span>
             </div>
             <p className="exp-company">{exp.company}</p>
             <p className="exp-date">{new Date(exp.startDate).toLocaleDateString()}{exp.isCurrent ? ' - Present' : exp.endDate ? ` - ${new Date(exp.endDate).toLocaleDateString()}` : ''}</p>
             {exp.description && <p className="exp-description">{exp.description}</p>}
             <div className="exp-actions">
-              <button onClick={() => handleEdit(index)} className="btn-edit">Ã¢Å“Å½ Edit</button>
-              <button onClick={() => handleRemove(index)} className="btn-delete">Ã°Å¸â€”â€˜ Remove</button>
+              <button onClick={() => handleEdit(index)} className="btn-edit">Edit</button>
+              <button onClick={() => handleRemove(index)} className="btn-delete">Remove</button>
             </div>
           </div>
         ))}
@@ -317,15 +317,15 @@ function CertificationForm({ certifications = [], onChange, maxCertifications = 
           <div key={index} className={`cert-item cert-item-${cert.source}`}>
             <div className="cert-header-item">
               <h4>{cert.title}</h4>
-              <span className={`cert-source ${cert.source}`}>{cert.source === 'auto' ? 'Ã°Å¸â€â€” Auto-filled' : 'Ã¢Å“ÂÃ¯Â¸Â User-entered'}</span>
+              <span className={`cert-source ${cert.source}`}>{cert.source === 'auto' ? 'Auto-filled' : 'User-entered'}</span>
             </div>
             <p className="cert-issuer">{cert.issuer}</p>
-            <p className="cert-date">Issued: {new Date(cert.issueDate).toLocaleDateString()}{cert.noExpiry ? ' Ã¢â‚¬Â¢ No expiry' : cert.expiryDate ? ` Ã¢â‚¬Â¢ Expires: ${new Date(cert.expiryDate).toLocaleDateString()}` : ''}</p>
+            <p className="cert-date">Issued: {new Date(cert.issueDate).toLocaleDateString()}{cert.noExpiry ? ' - No expiry' : cert.expiryDate ? ` - Expires: ${new Date(cert.expiryDate).toLocaleDateString()}` : ''}</p>
             {cert.credentialId && <p className="cert-credential">ID: {cert.credentialId}</p>}
-            {cert.credentialUrl && <p className="cert-url"><a href={cert.credentialUrl} target="_blank" rel="noopener noreferrer">View Credential Ã¢â€ â€™</a></p>}
+            {cert.credentialUrl && <p className="cert-url"><a href={cert.credentialUrl} target="_blank" rel="noopener noreferrer">View Credential</a></p>}
             <div className="cert-actions">
-              <button onClick={() => handleEdit(index)} className="btn-edit">Ã¢Å“Å½ Edit</button>
-              <button onClick={() => handleRemove(index)} className="btn-delete">Ã°Å¸â€”â€˜ Remove</button>
+              <button onClick={() => handleEdit(index)} className="btn-edit">Edit</button>
+              <button onClick={() => handleRemove(index)} className="btn-delete">Remove</button>
             </div>
           </div>
         ))}
@@ -338,7 +338,7 @@ function CertificationForm({ certifications = [], onChange, maxCertifications = 
 export default function LinkedInPage() {
   const { user } = useAuth();
   const hasAccess = hasProfileBrandingAccess(user?.permissions?.profileBranding, 'linkedin');
-  // Apify-based fetch Ã¢â‚¬â€ no manual browser login required
+  // Apify-based fetch: no manual browser login required
   const [isLoggedIn] = useState(true);
 
   // Form states
@@ -470,7 +470,7 @@ export default function LinkedInPage() {
 
   // Ensure LinkedIn session flag is cleared when tab/window is closed
   const handleLogout = () => {
-    // Clear any fetched data Ã¢â‚¬â€ Apify does not require local login
+    // Clear any fetched data: Apify does not require local login
     try {
       setScrapedData(null);
       setProfileUrl('');
@@ -486,7 +486,7 @@ export default function LinkedInPage() {
       return;
     }
 
-    // Using Apify actor Ã¢â‚¬â€ no manual login required
+    // Using Apify actor: no manual login required
 
     if (!profileUrl.trim()) {
       toast.error('Please enter a LinkedIn profile URL');
@@ -502,7 +502,7 @@ export default function LinkedInPage() {
     setLoading(true);
       let toastId;
       try {
-        toastId = toast.loading('Fetching profile via Apify Ã¢â‚¬â€ this may take a moment.');
+        toastId = toast.loading('Fetching profile via Apify. This may take a moment.');
 
         const res = await profileService.scrapeLinkedIn({ profileUrl: normalized });
 
@@ -670,14 +670,14 @@ export default function LinkedInPage() {
         <div className="login-header">
           <h3>LinkedIn Scraper</h3>
           <div className="login-status-active">
-            <span className="status-badge">Ã°Å¸Å’Â Scraping via Apify</span>
+            <span className="status-badge">Scraping via Apify</span>
             <Button onClick={handleLogout} variant="secondary" size="small">
               Clear Data
             </Button>
           </div>
         </div>
         <p className="login-info">
-          Ã°Å¸â€â€™ Scraping is handled by Apify actors; no local browser login is required.
+          Scraping is handled by Apify actors; no local browser login is required.
         </p>
       </Card>
 
@@ -695,7 +695,7 @@ export default function LinkedInPage() {
             Scrape Profile
           </Button>
           <p style={{ fontSize: 12, marginTop: 10, color: '#666' }}>
-            Profile will be fetched via Apify actors Ã¢â‚¬â€ this may take a minute or two.
+            Profile will be fetched via Apify actors; this may take a minute or two.
           </p>
         </Card>
       )}
@@ -708,7 +708,7 @@ export default function LinkedInPage() {
           {/* Auto-filled indicators */}
           {scrapedData && (
             <div className="scraped-notice">
-              Ã°Å¸â€œâ€¹ Some fields were auto-filled from LinkedIn. You can edit them below.
+              Some fields were auto-filled from LinkedIn. You can edit them below.
             </div>
           )}
 
@@ -878,14 +878,16 @@ export default function LinkedInPage() {
       {/* Save Button */}
       {isLoggedIn && (
         <Card style={{ marginTop: 20, textAlign: 'center' }}>
-          <Button
-            onClick={handleSaveProfile}
-            loading={loading}
-            disabled={!hasAccess || (missingFields && missingFields.length > 0)}
-            style={{ minWidth: 200, marginBottom: 10 }}
-          >
-            Save & Calculate Score
-          </Button>
+          <div className="profile-save-button-wrap">
+            <Button
+              onClick={handleSaveProfile}
+              loading={loading}
+              disabled={!hasAccess || (missingFields && missingFields.length > 0)}
+              style={{ minWidth: 200, marginBottom: 10 }}
+            >
+              Save & Calculate Score
+            </Button>
+          </div>
           <p style={{ fontSize: 12, color: '#666', margin: '10px 0 0 0' }}>
             Your profile will be saved and your branding score will be calculated automatically.
           </p>

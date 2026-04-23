@@ -60,7 +60,7 @@ if (bootToken) {
   setApiAuthToken(bootToken);
 }
 
-// Request interceptor â€” attach token
+// Request interceptor - attach token
 api.interceptors.request.use(
   (config) => {
     const existingAuthHeader = config.headers?.Authorization || config.headers?.authorization;
@@ -79,7 +79,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor â€” handle global errors
+// Response interceptor - handle global errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -109,7 +109,7 @@ api.interceptors.response.use(
 export default api;
 
 
-// â”€â”€â”€ Profile Branding Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Profile Branding Service
 export const profileService = {
   getScore:           ()       => api.get('/profile-branding/score'),
   calculateScore:     ()       => api.post('/profile-branding/calculate'),
@@ -130,7 +130,7 @@ export const profileService = {
   completeSuggestion: (id)     => api.put(`/profile-branding/suggestions/${id}/complete`)
 };
 
-// â”€â”€â”€ AI Services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// AI Services
 export const aiService = {
   improveHeadline:    (data)   => api.post('/ai-services/improve-headline', data),
   improveAbout:       (data)   => api.post('/ai-services/improve-about', data),

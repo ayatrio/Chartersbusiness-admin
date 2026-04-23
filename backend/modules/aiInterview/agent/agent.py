@@ -92,7 +92,7 @@ def text_from_conversation_event(event: ConversationItemAddedEvent) -> str:
 
 
 async def entrypoint(ctx: JobContext):
-    logger.info("Agent starting for room: %s", ctx.room.name)
+    logger.info("Agent starting for a LiveKit room")
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     vad_model = ctx.proc.userdata.get("vad") or silero.VAD.load()
 
@@ -198,7 +198,7 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    logger.info("Starting LiveKit AI interview worker with agent_name=%s", AGENT_NAME)
+    logger.info("Starting LiveKit AI interview worker")
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,

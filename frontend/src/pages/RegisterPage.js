@@ -21,9 +21,6 @@ const COURSE_OPTIONS = [
   'Product Growth Engineering'
 ];
 
-const INVERSE_LABEL_STYLE = { color: 'rgba(255,255,255,0.84)' };
-const INVERSE_HINT_STYLE = { color: 'rgba(255,255,255,0.7)' };
-
 export default function RegisterPage() {
   const { register } = useAuth();
   const [form, setForm] = useState({
@@ -72,62 +69,23 @@ export default function RegisterPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', padding: 28 }}>
-      <div style={{ maxWidth: 1240, margin: '0 auto' }}>
-        <div style={{ marginBottom: 24 }}>
+    <div className="auth-shell auth-shell--register">
+      <div className="auth-shell__inner auth-shell__inner--register">
+        <div className="auth-shell__logo">
           <BrandMark />
         </div>
 
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 28,
-          alignItems: 'stretch'
-        }}>
-          <section style={{
-            flex: '1 1 420px',
-            minHeight: 640,
-            borderRadius: 28,
-            padding: '44px 42px',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            boxShadow: 'var(--shadow-lg)'
-          }}>
-            <p style={{
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: 'var(--accent)',
-              marginBottom: 12
-            }}>
-              Why Join
-            </p>
-            <h1 style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 48,
-              lineHeight: 1.05,
-              fontWeight: 800,
-              color: 'var(--text-primary)',
-              maxWidth: 500,
-              marginBottom: 18
-            }}>
+        <div className="auth-shell__grid">
+          <section className="auth-panel auth-panel--form auth-panel--register-info">
+            <p className="auth-eyebrow">Why Join</p>
+            <h1 className="auth-title auth-title--hero auth-title--dark">
               Build your profile with the same clarity as a premium institutional platform.
             </h1>
-            <p style={{
-              fontSize: 16,
-              lineHeight: 1.75,
-              color: 'var(--text-secondary)',
-              maxWidth: 520
-            }}>
+            <p className="auth-copy auth-copy--hero auth-copy--dark">
               Choose your course track, connect your public profiles, and start measuring the signals that shape your professional brand.
             </p>
 
-            <div style={{
-              marginTop: 30,
-              display: 'grid',
-              gap: 16
-            }}>
+            <div className="auth-value-list">
               {[
                 {
                   title: 'Choose your course direction',
@@ -142,76 +100,32 @@ export default function RegisterPage() {
                   text: 'Clean layouts, calm surfaces, and sharper hierarchy make the product feel more trusted and academic.'
                 }
               ].map((item) => (
-                <div
-                  key={item.title}
-                  style={{
-                    padding: '18px 20px',
-                    borderRadius: 20,
-                    background: 'var(--surface-tint)',
-                    border: '1px solid var(--border)'
-                  }}
-                >
-                  <h3 style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 20,
-                    fontWeight: 800,
-                    color: 'var(--text-primary)',
-                    marginBottom: 6
-                  }}>
-                    {item.title}
-                  </h3>
-                  <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                    {item.text}
-                  </p>
+                <div key={item.title} className="auth-value-card">
+                  <h3 className="auth-value-card__title">{item.title}</h3>
+                  <p className="auth-value-card__text">{item.text}</p>
                 </div>
               ))}
             </div>
           </section>
 
-          <section style={{
-            flex: '0 1 500px',
-            width: '100%',
-            borderRadius: 28,
-            padding: '40px 36px',
-            background: 'linear-gradient(160deg, var(--accent-light), var(--accent-strong))',
-            color: '#fff',
-            boxShadow: '0 28px 56px rgba(177, 7, 56, 0.2)'
-          }}>
-            <div style={{ marginBottom: 28 }}>
-              <p style={{
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: 'rgba(255,255,255,0.82)',
-                marginBottom: 10
-              }}>
-                Create Account
-              </p>
-              <h2 style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 34,
-                fontWeight: 800,
-                color: '#fff',
-                marginBottom: 8
-              }}>
-                Start your profile journey
-              </h2>
-              <p style={{ color: 'rgba(255,255,255,0.84)', fontSize: 15, lineHeight: 1.65 }}>
+          <section className="auth-panel auth-panel--inverse auth-panel--register-form">
+            <div className="auth-panel__header">
+              <p className="auth-eyebrow auth-eyebrow--inverse">Create Account</p>
+              <h2 className="auth-title auth-title--section auth-title--inverse">Start your profile journey</h2>
+              <p className="auth-copy auth-copy--inverse">
                 Register once, pick your course, and begin building a stronger professional brand.
               </p>
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="auth-form-grid auth-form-grid--two">
                 <InputField
                   label="First Name"
                   value={form.firstName}
                   onChange={set('firstName')}
                   placeholder="Jane"
                   icon={<RiUserLine />}
-                  labelStyle={INVERSE_LABEL_STYLE}
-                  hintStyle={INVERSE_HINT_STYLE}
+                  tone="inverse"
                   required
                 />
                 <InputField
@@ -219,8 +133,7 @@ export default function RegisterPage() {
                   value={form.lastName}
                   onChange={set('lastName')}
                   placeholder="Doe"
-                  labelStyle={INVERSE_LABEL_STYLE}
-                  hintStyle={INVERSE_HINT_STYLE}
+                  tone="inverse"
                   required
                 />
               </div>
@@ -232,8 +145,7 @@ export default function RegisterPage() {
                 onChange={set('email')}
                 placeholder="you@example.com"
                 icon={<RiMailLine />}
-                labelStyle={INVERSE_LABEL_STYLE}
-                hintStyle={INVERSE_HINT_STYLE}
+                tone="inverse"
                 required
               />
 
@@ -243,76 +155,39 @@ export default function RegisterPage() {
                 onChange={set('phone')}
                 placeholder="+91 98765 43210"
                 icon={<RiPhoneLine />}
-                labelStyle={INVERSE_LABEL_STYLE}
-                hintStyle={INVERSE_HINT_STYLE}
+                tone="inverse"
               />
 
-              <div style={{ marginBottom: 18 }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: 'rgba(255,255,255,0.84)',
-                  marginBottom: 10
-                }}>
-                  Select Course
-                </label>
+              <div className="course-selector">
+                <label className="course-selector__label">Select Course</label>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="course-selector__options">
                   {COURSE_OPTIONS.map((course) => {
                     const selected = form.selectedCourse === course;
+                    const optionClassName = selected ? 'course-option is-selected' : 'course-option';
 
                     return (
                       <button
                         key={course}
                         type="button"
                         onClick={() => setForm((prev) => ({ ...prev, selectedCourse: course }))}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '14px 16px',
-                          borderRadius: 16,
-                          border: `1px solid ${selected ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.18)'}`,
-                          background: selected ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          transition: 'all 0.18s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 12
-                        }}
+                        className={optionClassName}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{
-                            color: selected ? '#fff' : 'rgba(255,255,255,0.72)',
-                            fontSize: 18,
-                            display: 'flex',
-                            alignItems: 'center'
-                          }}>
+                        <div className="course-option__main">
+                          <span className="course-option__icon">
                             <RiBookOpenLine />
                           </span>
-                          <span style={{ fontSize: 14, fontWeight: 600 }}>
-                            {course}
-                          </span>
+                          <span className="course-option__text">{course}</span>
                         </div>
 
-                        <span style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: '50%',
-                          border: `2px solid ${selected ? '#fff' : 'rgba(255,255,255,0.6)'}`,
-                          background: selected ? '#fff' : 'transparent',
-                          boxShadow: selected ? '0 0 0 4px rgba(255,255,255,0.12)' : 'none',
-                          flexShrink: 0
-                        }} />
+                        <span className="course-option__radio" />
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div style={{ position: 'relative' }}>
+              <div className="auth-password-wrap">
                 <InputField
                   label="Password"
                   type={showPass ? 'text' : 'password'}
@@ -320,23 +195,13 @@ export default function RegisterPage() {
                   onChange={set('password')}
                   placeholder="Min. 6 characters"
                   icon={<RiLockLine />}
-                  labelStyle={INVERSE_LABEL_STYLE}
-                  hintStyle={INVERSE_HINT_STYLE}
+                  tone="inverse"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  style={{
-                    position: 'absolute',
-                    right: 14,
-                    top: 38,
-                    background: 'none',
-                    border: 'none',
-                    color: 'rgba(255,255,255,0.8)',
-                    cursor: 'pointer',
-                    fontSize: 16
-                  }}
+                  className="auth-password-toggle auth-password-toggle--inverse"
                 >
                   {showPass ? <RiEyeOffLine /> : <RiEyeLine />}
                 </button>
@@ -349,8 +214,7 @@ export default function RegisterPage() {
                 onChange={set('confirm')}
                 placeholder="Repeat password"
                 icon={<RiLockLine />}
-                labelStyle={INVERSE_LABEL_STYLE}
-                hintStyle={INVERSE_HINT_STYLE}
+                tone="inverse"
                 required
               />
 
@@ -359,30 +223,16 @@ export default function RegisterPage() {
                 loading={loading}
                 fullWidth
                 size="lg"
-                style={{
-                  marginTop: 10,
-                  background: '#fff',
-                  color: 'var(--accent)',
-                  boxShadow: '0 18px 36px rgba(0, 0, 0, 0.08)'
-                }}
+                className="auth-submit--light"
+                style={{ marginTop: 10 }}
               >
                 Create Account
               </Button>
             </form>
 
-            <p style={{
-              marginTop: 22,
-              fontSize: 14,
-              color: 'rgba(255,255,255,0.8)'
-            }}>
+            <p className="auth-footer-copy auth-footer-copy--inverse">
               Already have an account?{' '}
-              <Link to="/login" style={{
-                color: '#fff',
-                textDecoration: 'none',
-                fontWeight: 700
-              }}>
-                Sign in
-              </Link>
+              <Link to="/login" className="auth-inline-link auth-inline-link--inverse">Sign in</Link>
             </p>
           </section>
         </div>

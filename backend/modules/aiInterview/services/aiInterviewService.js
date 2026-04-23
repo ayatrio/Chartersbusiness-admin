@@ -36,19 +36,6 @@ const normalizeText = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .trim();
 
-const maskValue = (value, visible = 4) => {
-  const normalized = normalizeText(value);
-  if (!normalized) {
-    return null;
-  }
-
-  if (normalized.length <= visible) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, visible)}***`;
-};
-
 const logAiInterviewEvent = (type, details = {}) => {
   console.log(JSON.stringify({
     level: 'info',
@@ -381,7 +368,6 @@ const dispatchInterviewAgent = async ({
 
     logAiInterviewEvent('livekit_agent_dispatch_unavailable', {
       requestId: requestId || null,
-      room,
       agentName,
       message,
     });
@@ -412,7 +398,8 @@ const dispatchInterviewAgent = async ({
       const summary = summarizeDispatch(existingDispatch);
       logAiInterviewEvent('livekit_agent_dispatch_reused', {
         requestId: requestId || null,
-        ...summary,
+        agentName: summary.agentName,
+        activeJobs: summary.activeJobs,
       });
 
       return {
@@ -436,7 +423,8 @@ const dispatchInterviewAgent = async ({
     const summary = summarizeDispatch(createdDispatch);
     logAiInterviewEvent('livekit_agent_dispatch_created', {
       requestId: requestId || null,
-      ...summary,
+      agentName: summary.agentName,
+      activeJobs: summary.activeJobs,
     });
 
     return {
@@ -455,7 +443,6 @@ const dispatchInterviewAgent = async ({
 
     logAiInterviewEvent('livekit_agent_dispatch_failed', {
       requestId: requestId || null,
-      room,
       agentName,
       message,
     });
@@ -615,18 +602,7 @@ const aiInterviewService = {
 
     logAiInterviewEvent('livekit_token_issued', {
       requestId: requestId || null,
-      livekitUrl,
-      apiKeyPrefix: maskValue(apiKey, 6),
-      apiSecretPrefix: maskValue(apiSecret, 5),
-      room,
-      identity,
       actorRole: normalizeText(user?.role).toLowerCase() || null,
-      actorId: normalizeText(
-        user?.chartersUserId
-        || user?._id
-        || user?.email
-        || user?.id
-      ) || null,
       agentDispatchStatus: agentDispatch.success
         ? (agentDispatch.reused ? 'reused' : 'created')
         : (agentDispatch.attempted ? 'failed' : 'skipped'),

@@ -4,6 +4,14 @@ const Tesseract = require('tesseract.js');
 const pdf = require('pdf-parse');
 const fs = require('fs');
 
+const logControllerError = (label, error) => {
+  console.error(`${label}:`, {
+    message: error?.message || 'Unknown error',
+    statusCode: error?.status || error?.response?.status || null,
+    code: error?.code || null,
+  });
+};
+
 const getGeminiApiKey = () => {
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
@@ -252,7 +260,7 @@ exports.improveHeadline = async (req, res, next) => {
       suggestions
     });
   } catch (error) {
-    console.error('Gemini Error:', error);
+    logControllerError('Gemini Error', error);
     next(error);
   }
 };
@@ -283,7 +291,7 @@ exports.improveAboutSection = async (req, res, next) => {
       improvedAbout
     });
   } catch (error) {
-    console.error('Gemini Error:', error);
+    logControllerError('Gemini Error', error);
     next(error);
   }
 };
@@ -365,7 +373,7 @@ exports.analyzeProfilePicture = async (req, res, next) => {
     // Clean up uploaded file
     fs.unlinkSync(req.file.path);
   } catch (error) {
-    console.error('Vision API Error:', error);
+    logControllerError('Vision API Error', error);
     next(error);
   }
 };
@@ -421,7 +429,7 @@ exports.extractCertificateText = async (req, res, next) => {
       extractedInfo
     });
   } catch (error) {
-    console.error('OCR Error:', error);
+    logControllerError('OCR Error', error);
     next(error);
   } finally {
     if (req.file?.path && fs.existsSync(req.file.path)) {
@@ -519,7 +527,7 @@ exports.parseResume = async (req, res, next) => {
       });
     }
   } catch (error) {
-    console.error('Resume parsing error:', error);
+    logControllerError('Resume parsing error', error);
     next(error);
   } finally {
     if (req.file?.path && fs.existsSync(req.file.path)) {
@@ -560,7 +568,7 @@ Generate exactly 5 prioritized suggestions, one per line, with no numbering or e
       suggestions
     });
   } catch (error) {
-    console.error('Gemini Error:', error);
+    logControllerError('Gemini Error', error);
     next(error);
   }
 };
@@ -601,7 +609,7 @@ exports.checkGrammar = async (req, res, next) => {
       errorCount: errors.length
     });
   } catch (error) {
-    console.error('Grammar check error:', error);
+    logControllerError('Grammar check error', error);
     // Fallback: return no errors if service fails
     res.status(200).json({
       success: true,

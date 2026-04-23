@@ -79,7 +79,7 @@ const BenefitItem = ({ text }) => (
             justifyContent: 'center',
             fontSize: '10px'
         }}>
-            âœ“
+            +
         </div>
         {text}
     </li>

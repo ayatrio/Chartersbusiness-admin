@@ -39,7 +39,7 @@ export default function LoginPage() {
 
       toast.success('Welcome back!');
 
-      // ðŸ”¥ Redirect to NEW dashboard
+      // Redirect to new dashboard
       const destination = res?.user?.role === 'admin' ? '/admin' : '/home';
       navigate(destination);
     } catch (err) {
@@ -55,176 +55,50 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', padding: 28 }}>
-      <div style={{ maxWidth: 1180, margin: '0 auto' }}>
-
-        {/* Logo */}
-        <div style={{ marginBottom: 24 }}>
+    <div className="auth-shell auth-shell--login">
+      <div className="auth-shell__inner auth-shell__inner--login">
+        <div className="auth-shell__logo">
           <BrandMark />
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 28,
-            alignItems: 'stretch'
-          }}
-        >
+        <div className="auth-shell__grid">
+          <section className="auth-panel auth-panel--feature auth-panel--login-feature">
+            <div className="auth-panel__glow" />
 
-          {/* LEFT PANEL */}
-          <section
-            style={{
-              flex: '1 1 420px',
-              minHeight: 560,
-              borderRadius: 28,
-              padding: '44px 42px',
-              background:
-                'linear-gradient(160deg, var(--accent-light), var(--accent-strong))',
-              color: '#fff',
-              boxShadow: '0 28px 56px rgba(177, 7, 56, 0.18)',
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background:
-                  'radial-gradient(circle at top right, rgba(255,255,255,0.15), transparent 30%)',
-                pointerEvents: 'none'
-              }}
-            />
+            <div className="auth-panel__content">
+              <p className="auth-eyebrow auth-eyebrow--inverse">Career Branding Platform</p>
 
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <p
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  opacity: 0.9,
-                  marginBottom: 18
-                }}
-              >
-                Career Branding Platform
-              </p>
-
-              <h1
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 52,
-                  lineHeight: 1.02,
-                  fontWeight: 800,
-                  maxWidth: 470,
-                  marginBottom: 18
-                }}
-              >
+              <h1 className="auth-title auth-title--hero">
                 Build a profile that stands out with clarity and confidence.
               </h1>
 
-              <p
-                style={{
-                  maxWidth: 500,
-                  fontSize: 17,
-                  lineHeight: 1.75,
-                  color: 'rgba(255,255,255,0.88)'
-                }}
-              >
+              <p className="auth-copy auth-copy--hero auth-copy--inverse">
                 Track your professional presence, score your branding profile,
                 and turn weak spots into focused next steps.
               </p>
 
-              <div
-                style={{
-                  marginTop: 34,
-                  display: 'grid',
-                  gap: 14,
-                  maxWidth: 500
-                }}
-              >
+              <div className="auth-feature-list auth-feature-list--login">
                 {[
                   'Measure LinkedIn, GitHub, website, credentials, networking, and thought leadership in one place.',
                   'Get actionable suggestions you can actually complete, not just static analytics.',
                   'Work inside a cleaner, more structured experience inspired by modern academic platforms.'
                 ].map((item) => (
-                  <div
-                    key={item}
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      alignItems: 'flex-start',
-                      padding: '14px 16px',
-                      borderRadius: 18,
-                      background: 'rgba(255,255,255,0.12)',
-                      border: '1px solid rgba(255,255,255,0.14)'
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: '#fff',
-                        marginTop: 9,
-                        flexShrink: 0
-                      }}
-                    />
-                    <p style={{ fontSize: 14, lineHeight: 1.6 }}>
-                      {item}
-                    </p>
+                  <div key={item} className="auth-feature-item auth-feature-item--inverse">
+                    <span className="auth-feature-dot" />
+                    <p className="auth-feature-text">{item}</p>
                   </div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* RIGHT PANEL */}
-          <section
-            style={{
-              flex: '0 1 440px',
-              width: '100%',
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border)',
-              borderRadius: 28,
-              padding: '40px 36px',
-              boxShadow: 'var(--shadow-lg)'
-            }}
-          >
-            <div style={{ marginBottom: 30 }}>
-              <p
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: 'var(--accent)',
-                  marginBottom: 10
-                }}
-              >
-                Welcome Back
-              </p>
+          <section className="auth-panel auth-panel--form auth-panel--login-form">
+            <div className="auth-panel__header">
+              <p className="auth-eyebrow">Welcome Back</p>
 
-              <h2
-                style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 32,
-                  fontWeight: 800,
-                  color: 'var(--text-primary)',
-                  marginBottom: 8
-                }}
-              >
-                Sign in to continue
-              </h2>
+              <h2 className="auth-title auth-title--section">Sign in to continue</h2>
 
-              <p
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: 15,
-                  lineHeight: 1.6
-                }}
-              >
+              <p className="auth-copy">
                 Access your dashboard and continue improving your profile.
               </p>
             </div>
@@ -240,7 +114,7 @@ export default function LoginPage() {
                 required
               />
 
-              <div style={{ position: 'relative' }}>
+              <div className="auth-password-wrap">
                 <InputField
                   label="Password"
                   type={showPass ? 'text' : 'password'}
@@ -254,16 +128,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  style={{
-                    position: 'absolute',
-                    right: 14,
-                    top: 38,
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: 16
-                  }}
+                  className="auth-password-toggle"
                 >
                   {showPass ? <RiEyeOffLine /> : <RiEyeLine />}
                 </button>
@@ -280,24 +145,9 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p
-              style={{
-                marginTop: 22,
-                fontSize: 14,
-                color: 'var(--text-secondary)'
-              }}
-            >
+            <p className="auth-footer-copy">
               Don't have an account?{' '}
-              <Link
-                to="/register"
-                style={{
-                  color: 'var(--accent)',
-                  textDecoration: 'none',
-                  fontWeight: 700
-                }}
-              >
-                Create one
-              </Link>
+              <Link to="/register" className="auth-inline-link">Create one</Link>
             </p>
           </section>
         </div>

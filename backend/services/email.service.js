@@ -49,7 +49,7 @@ const sendInstantMeetingNotification = async ({
       `,
     });
 
-    console.log(`✅ Instant meeting notification sent to ${adminEmail}`);
+    console.log("Instant meeting notification sent successfully");
     return { success: true, message: "Notification email sent successfully" };
   } catch (error) {
     console.error(
@@ -135,9 +135,7 @@ const sendScheduledMeetingConfirmation = async ({
       `,
     });
 
-    console.log(
-      `✅ Meeting confirmation sent to ${hostEmail} and ${adminEmail}`,
-    );
+    console.log("Meeting confirmation emails sent successfully");
     return { success: true, message: "Confirmation emails sent successfully" };
   } catch (error) {
     console.error("❌ Failed to send meeting confirmation:", error.message);

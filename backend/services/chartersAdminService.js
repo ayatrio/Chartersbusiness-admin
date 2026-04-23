@@ -33,6 +33,26 @@ const getDefaultChartersBaseUrls = () => (
 
 const getDefaultChartersBaseUrl = () => getDefaultChartersBaseUrls()[0];
 
+const sanitizeUrlForLog = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const parsed = new URL(raw);
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+  } catch (error) {
+    // fall through to simple sanitization
+  }
+
+  const withoutHash = raw.split('#')[0];
+  const withoutQuery = withoutHash.split('?')[0];
+  return withoutQuery || '/';
+};
+
 const normalizeTimeout = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -307,7 +327,7 @@ const getUpstreamContext = (error) => {
   return {
     status: error?.response?.status || null,
     method: error?.config?.method ? String(error.config.method).toUpperCase() : null,
-    url,
+    url: sanitizeUrlForLog(url),
     retryAfter,
   };
 };
@@ -519,7 +539,7 @@ const requestWithRetry = async (client, method, url, requestConfig = {}) => {
       logUpstreamEvent('info', 'upstream_request_success', {
         requestId: trace.requestId || null,
         method: normalizedMethod.toUpperCase(),
-        url: upstreamUrl,
+        url: sanitizeUrlForLog(upstreamUrl),
         statusCode: response.status,
         retryCount: attempt,
         durationMs: Date.now() - startedAt,
@@ -534,7 +554,7 @@ const requestWithRetry = async (client, method, url, requestConfig = {}) => {
         logUpstreamEvent('error', 'upstream_request_failure', {
           requestId: trace.requestId || null,
           method: normalizedMethod.toUpperCase(),
-          url: upstreamUrl,
+          url: sanitizeUrlForLog(upstreamUrl),
           statusCode,
           retryCount: attempt,
           durationMs: Date.now() - startedAt,
@@ -551,7 +571,7 @@ const requestWithRetry = async (client, method, url, requestConfig = {}) => {
       logUpstreamEvent('warn', 'upstream_request_retry', {
         requestId: trace.requestId || null,
         method: normalizedMethod.toUpperCase(),
-        url: upstreamUrl,
+        url: sanitizeUrlForLog(upstreamUrl),
         statusCode,
         retryCount: attempt,
         nextRetryInMs: delay,
@@ -602,7 +622,7 @@ const chartersAdminService = {
             logUpstreamEvent('info', 'upstream_login_validation_success', {
               requestId: client.__chartersTrace?.requestId || null,
               method: 'POST',
-              url: `${baseURL}${loginPath}`,
+              url: sanitizeUrlForLog(`${baseURL}${loginPath}`),
               statusCode: response.status,
               retryCount: retryAttempt,
               durationMs: Date.now() - attemptStartedAt,
@@ -627,7 +647,7 @@ const chartersAdminService = {
               logUpstreamEvent('warn', 'upstream_login_validation_retry', {
                 requestId: client.__chartersTrace?.requestId || null,
                 method: 'POST',
-                url: `${baseURL}${loginPath}`,
+                url: sanitizeUrlForLog(`${baseURL}${loginPath}`),
                 statusCode: status || null,
                 retryCount: retryAttempt,
                 nextRetryInMs: delay,
@@ -645,7 +665,7 @@ const chartersAdminService = {
             logUpstreamEvent('error', 'upstream_login_validation_failure', {
               requestId: client.__chartersTrace?.requestId || null,
               method: 'POST',
-              url: `${baseURL}${loginPath}`,
+              url: sanitizeUrlForLog(`${baseURL}${loginPath}`),
               statusCode: status || null,
               retryCount: retryAttempt,
               durationMs: Date.now() - attemptStartedAt,

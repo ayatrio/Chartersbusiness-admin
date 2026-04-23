@@ -54,6 +54,14 @@ const getNetworkingLongFormArticles = (networking = {}) => (
   )
 );
 
+const logControllerError = (label, error) => {
+  console.error(`${label}:`, {
+    message: error?.message || 'Unknown error',
+    statusCode: error?.status || error?.response?.status || null,
+    code: error?.code || null,
+  });
+};
+
 const toSuggestionRecord = (item) => (
   item && typeof item.toObject === 'function' ? item.toObject() : item
 );
@@ -302,7 +310,7 @@ exports.updateLinkedIn = async (req, res, next) => {
       }
     } catch (e) {
       // continue even if deletion fails for some edge reason
-      console.warn('Failed to remove scrapedDraft fields:', e && e.message ? e.message : e);
+      console.warn('Failed to remove scrapedDraft fields:', e && e.message ? e.message : 'Unknown error');
     }
 
     profile.lastCalculated = new Date();
@@ -348,7 +356,7 @@ exports.scrapeLinkedIn = async (req, res, next) => {
     }
 
     const jobId = linkedinScraperJobQueue.createJob(profileUrl, req.user.id);
-    console.log(`Enqueued LinkedIn scrape job ${jobId} for user ${req.user.id}`);
+    console.log('Enqueued LinkedIn scrape job successfully');
 
     return res.status(202).json({ success: true, message: 'Scrape started', jobId });
   } catch (error) {
@@ -425,7 +433,7 @@ exports.fetchGithubProfile = async (req, res, next) => {
       github: profile.github
     });
   } catch (error) {
-    console.error('GitHub API Error:', error);
+    logControllerError('GitHub API Error', error);
 
     const message = (error?.message || '').toLowerCase();
 

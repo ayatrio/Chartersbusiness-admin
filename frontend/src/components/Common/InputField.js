@@ -3,52 +3,30 @@ import React, { useState } from 'react';
 export default function InputField({
   label, type = 'text', value, onChange,
   placeholder, required, error, hint,
-  icon, rows, style = {}, labelStyle = {}, hintStyle = {}
+  icon, rows, style = {}, labelStyle = {}, hintStyle = {}, tone = 'default'
 }) {
   const [focused, setFocused] = useState(false);
   const isTextarea = type === 'textarea';
-
-  const inputStyle = {
-    width: '100%',
-    padding: icon ? '12px 14px 12px 42px' : '12px 14px',
-    background: focused ? '#fff' : 'var(--surface-tint)',
-    border: `1px solid ${error ? 'var(--red)' : focused ? 'var(--accent)' : 'var(--border)'}`,
-    borderRadius: 'var(--radius-sm)',
-    color: 'var(--text-primary)',
-    fontSize: 14,
-    fontFamily: 'var(--font-body)',
-    outline: 'none',
-    transition: 'border-color 0.2s, box-shadow 0.2s, background 0.2s',
-    resize: isTextarea ? 'vertical' : 'none',
-    boxShadow: focused ? `0 0 0 4px ${error ? 'var(--red-dim)' : 'var(--accent-dim)'}` : 'none'
-  };
+  const wrapperClassName = tone === 'inverse' ? 'input-field input-field--inverse' : 'input-field';
+  const controlClassName = [
+    'input-field__control',
+    icon && 'input-field__control--with-icon',
+    isTextarea && 'is-textarea',
+    focused && 'is-focused',
+    error && 'is-error'
+  ].filter(Boolean).join(' ');
+  const iconClassName = focused ? 'input-field__icon is-focused' : 'input-field__icon';
 
   return (
-    <div style={{ marginBottom: 16, ...style }}>
+    <div className={wrapperClassName} style={style}>
       {label && (
-        <label style={{
-          display: 'block',
-          fontSize: 13,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          marginBottom: 6,
-          ...labelStyle
-        }}>
-          {label} {required && <span style={{ color: 'var(--red)' }}>*</span>}
+        <label className="input-field__label" style={labelStyle}>
+          {label} {required && <span className="input-field__required">*</span>}
         </label>
       )}
-      <div style={{ position: 'relative' }}>
+      <div className="input-field__control-wrap">
         {icon && (
-          <span style={{
-            position: 'absolute',
-            left: 14,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: focused ? 'var(--accent)' : 'var(--text-muted)',
-            fontSize: 16,
-            transition: 'color 0.2s',
-            pointerEvents: 'none'
-          }}>
+          <span className={iconClassName}>
             {icon}
           </span>
         )}
@@ -61,7 +39,7 @@ export default function InputField({
               rows={rows || 4}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              style={inputStyle}
+              className={controlClassName}
             />
           : <input
               type={type}
@@ -71,15 +49,15 @@ export default function InputField({
               required={required}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              style={inputStyle}
+              className={controlClassName}
             />
         }
       </div>
       {error && (
-        <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 5 }}>{error}</p>
+        <p className="input-field__error">{error}</p>
       )}
       {hint && !error && (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5, ...hintStyle }}>{hint}</p>
+        <p className="input-field__hint" style={hintStyle}>{hint}</p>
       )}
     </div>
   );
