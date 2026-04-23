@@ -46,6 +46,12 @@ const CATEGORY_ROUTES = {
   'Thought Leadership': '/youtube'
 };
 
+const TOOL_ROUTES = {
+  Website: '/website',
+  LinkedIn: '/linkedin',
+  GitHub: '/github'
+};
+
 const BREAKDOWN_ITEMS = [
   { label: 'Personal Presence', key: 'personalPresence', max: 25, color: 'var(--accent)' },
   { label: 'Professional Profiles', key: 'professionalProfiles', max: 25, color: 'var(--navy)' },
@@ -130,7 +136,7 @@ export default function DashboardPage() {
           loading={refreshing}
           onClick={handleRecalculate}
         >
-          Recalculate
+          Re-score
         </Button>
       )}
     >
@@ -378,7 +384,7 @@ export default function DashboardPage() {
               Improvement Suggestions
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {suggestions.length} pending · {completed.length} completed
+              {suggestions.length} pending / {completed.length} completed
             </p>
           </div>
         </div>
@@ -392,7 +398,7 @@ export default function DashboardPage() {
             <RiCheckboxCircleLine style={{ fontSize: 40, color: 'var(--green)', display: 'block', margin: '0 auto 8px' }} />
             <p style={{ fontSize: 14 }}>All suggestions completed - great work!</p>
             <p style={{ fontSize: 12, marginTop: 4 }}>
-              Recalculate your score to get fresh suggestions.
+              Re-score your profile to get fresh suggestions.
             </p>
           </div>
         ) : (
@@ -424,6 +430,17 @@ export default function DashboardPage() {
                     gap: 8,
                     marginBottom: 4
                   }}>
+                    <span style={{
+                      fontSize: 10,
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      background: 'var(--bg-hover)',
+                      color: 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      {suggestion.tool || 'Profile'}
+                    </span>
                     <span style={{
                       fontSize: 11,
                       fontWeight: 700,
@@ -461,6 +478,25 @@ export default function DashboardPage() {
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                     Impact: {suggestion.impact}
                   </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Expected score impact: +{suggestion.expectedScoreImpact || 0}
+                  </p>
+                  {suggestion.exampleRewrite ? (
+                    <div style={{
+                      marginTop: 8,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      background: 'var(--bg-secondary)',
+                      border: '1px dashed var(--border)'
+                    }}>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+                        Example rewrite
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                        {suggestion.exampleRewrite}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -468,7 +504,7 @@ export default function DashboardPage() {
                     variant="ghost"
                     size="sm"
                     icon={<RiArrowRightLine />}
-                    onClick={() => navigate(CATEGORY_ROUTES[suggestion.category] || '/dashboard')}
+                    onClick={() => navigate(TOOL_ROUTES[suggestion.tool] || CATEGORY_ROUTES[suggestion.category] || '/dashboard')}
                   >
                     Fix
                   </Button>
@@ -509,5 +545,6 @@ function DashboardSkeleton() {
     </PageLayout>
   );
 }
+
 
 

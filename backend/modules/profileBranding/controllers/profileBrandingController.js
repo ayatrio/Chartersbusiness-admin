@@ -54,6 +54,52 @@ const getNetworkingLongFormArticles = (networking = {}) => (
   )
 );
 
+const toSuggestionRecord = (item) => (
+  item && typeof item.toObject === 'function' ? item.toObject() : item
+);
+
+const getSuggestionKey = (item = {}) => [
+  String(item.tool || '').trim().toLowerCase(),
+  String(item.text || '').trim().toLowerCase(),
+  String(item.exampleRewrite || '').trim().toLowerCase()
+].join('|');
+
+const mergeGeneratedSuggestions = (existingSuggestions = [], generatedSuggestions = []) => {
+  const completedHistory = existingSuggestions
+    .map(toSuggestionRecord)
+    .filter((item) => item?.completed);
+
+  const completedByKey = new Map(
+    completedHistory.map((item) => [getSuggestionKey(item), item])
+  );
+
+  const usedCompletedKeys = new Set();
+
+  const nextSuggestions = generatedSuggestions.map((item) => {
+    const key = getSuggestionKey(item);
+    const completedMatch = completedByKey.get(key);
+
+    if (!completedMatch) {
+      return item;
+    }
+
+    usedCompletedKeys.add(key);
+    return {
+      ...item,
+      _id: completedMatch._id,
+      completed: true,
+      completedAt: completedMatch.completedAt || new Date(),
+      generatedAt: item.generatedAt || completedMatch.generatedAt || new Date()
+    };
+  });
+
+  const preservedCompletedHistory = completedHistory.filter(
+    (item) => !usedCompletedKeys.has(getSuggestionKey(item))
+  );
+
+  return [...nextSuggestions, ...preservedCompletedHistory];
+};
+
 // @desc    Get profile branding score
 // @route   GET /api/profile-branding/score
 // @access  Private
@@ -118,8 +164,8 @@ exports.calculateScore = async (req, res, next) => {
     }
 
     // Generate suggestions
-    const suggestions = suggestionService.generateSuggestions(profile, scores);
-    profile.suggestions = suggestions;
+    const suggestions = await suggestionService.generateSuggestions(profile, scores);
+    profile.suggestions = mergeGeneratedSuggestions(profile.suggestions, suggestions);
 
     profile.lastCalculated = new Date();
     await profile.save();
@@ -241,6 +287,10 @@ exports.updateLinkedIn = async (req, res, next) => {
       profile.scoreHistory = profile.scoreHistory.slice(-30);
     }
 
+    // Generate fresh per-tool suggestions on each save/re-score.
+    const suggestions = await suggestionService.generateSuggestions(profile, scores);
+    profile.suggestions = mergeGeneratedSuggestions(profile.suggestions, suggestions);
+
     // After user confirms/saves the LinkedIn data and we calculate scores,
     // remove any previously persisted scraped draft so it doesn't linger.
     try {
@@ -255,6 +305,7 @@ exports.updateLinkedIn = async (req, res, next) => {
       console.warn('Failed to remove scrapedDraft fields:', e && e.message ? e.message : e);
     }
 
+    profile.lastCalculated = new Date();
     await profile.save();
 
     res.status(200).json({

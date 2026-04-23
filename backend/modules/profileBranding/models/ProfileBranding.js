@@ -646,6 +646,11 @@ const profileBrandingSchema = new mongoose.Schema({
       enum: ['Personal Presence', 'Professional Profile', 'Networking', 'Credentials', 'Thought Leadership'],
       required: true
     },
+    tool: {
+      type: String,
+      enum: ['LinkedIn', 'GitHub', 'Website'],
+      default: 'LinkedIn'
+    },
     priority: {
       type: String,
       enum: ['high', 'medium', 'low'],
@@ -658,6 +663,16 @@ const profileBrandingSchema = new mongoose.Schema({
     impact: {
       type: String,
       required: true
+    },
+    expectedScoreImpact: {
+      type: Number,
+      min: 0,
+      max: 25,
+      default: 1
+    },
+    exampleRewrite: {
+      type: String,
+      default: ''
     },
     completed: {
       type: Boolean,

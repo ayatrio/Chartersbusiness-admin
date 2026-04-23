@@ -4,7 +4,7 @@ import PageLayout from '../../../components/Layout/PageLayout';
 import Card from '../../../components/Common/Card';
 import Button from '../../../components/Common/Button';
 import InputField from '../../../components/Common/InputField';
-import { profileService, aiService } from '../../../services/api';
+import { profileService } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 import { hasProfileBrandingAccess } from '../../../utils/permissions';
 import {
@@ -457,32 +457,16 @@ export default function LinkedInPage() {
     setMissingFields(missing);
   }, [scrapedData, profileInfo, skills, experiences]);
 
-  // Generate AI-driven suggestions after we have profileDoc or scrapedData
+  // Show fresh LinkedIn suggestions generated during profile scoring/re-scoring.
   useEffect(() => {
-    const runSuggestions = async () => {
-      try {
-        const profileData = {
-          hasWebsite: !!(profileDoc && profileDoc.personalWebsite && profileDoc.personalWebsite.url),
-          linkedInOptimized: !!(profileInfo.headline && profileInfo.about && skills.length >= 5),
-          githubActive: !!(profileDoc && profileDoc.github && profileDoc.github.username),
-          certificationCount: (profileDoc && profileDoc.certifications && profileDoc.certifications.length) || 0,
-          publicationCount: (profileDoc && profileDoc.publications && profileDoc.publications.length) || 0
-        };
+    const nextSuggestions = Array.isArray(profileDoc?.suggestions)
+      ? profileDoc.suggestions.filter((item) => (
+        !item?.completed && String(item?.tool || '').toLowerCase() === 'linkedin'
+      ))
+      : [];
 
-        const currentScore = (profileDoc && profileDoc.scores && profileDoc.scores.total) || 0;
-
-        const resp = await aiService.generateSuggestions({ profileData, currentScore, targetScore: null, targetRole: null });
-        if (resp && resp.data && Array.isArray(resp.data.suggestions)) {
-          setSuggestions(resp.data.suggestions);
-        }
-      } catch (e) {
-        console.warn('Failed to generate AI suggestions:', e?.message || e);
-        setSuggestions([]);
-      }
-    };
-
-    if (scrapedData || profileDoc) runSuggestions();
-  }, [scrapedData, profileDoc, profileInfo, skills]);
+    setSuggestions(nextSuggestions);
+  }, [profileDoc]);
 
   // Ensure LinkedIn session flag is cleared when tab/window is closed
   const handleLogout = () => {
@@ -638,7 +622,10 @@ export default function LinkedInPage() {
         }
       };
 
-      await profileService.updateLinkedIn(payload);
+      const { data } = await profileService.updateLinkedIn(payload);
+      if (data?.profile) {
+        setProfileDoc(data.profile);
+      }
 
       toast.success('LinkedIn profile saved successfully! Score calculated.');
 
@@ -737,9 +724,44 @@ export default function LinkedInPage() {
 
           {suggestions && suggestions.length > 0 && (
             <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: '#f6fbff', border: '1px solid #d7ecff' }}>
-              <strong>Personalized improvement suggestions</strong>
-              <ol style={{ margin: '8px 0 0 16px' }}>
-                {suggestions.map((s, i) => <li key={i}>{s}</li>)}
+              <strong>LinkedIn improvement suggestions</strong>
+              <ol style={{ margin: '8px 0 0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {suggestions.map((s, i) => (
+                  <li key={s?._id || i}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>
+                      {s?.text || 'Improve your LinkedIn profile'}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                      <span style={{
+                        fontSize: 11,
+                        color: '#555',
+                        background: '#eef3f8',
+                        borderRadius: 999,
+                        padding: '2px 8px',
+                        textTransform: 'capitalize'
+                      }}>
+                        Priority: {s?.priority || 'medium'}
+                      </span>
+                      <span style={{
+                        fontSize: 11,
+                        color: '#555',
+                        background: '#eef3f8',
+                        borderRadius: 999,
+                        padding: '2px 8px'
+                      }}>
+                        Expected +{s?.expectedScoreImpact || 0}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                      Impact: {s?.impact || `Expected +${s?.expectedScoreImpact || 0} points`}
+                    </div>
+                    {s?.exampleRewrite && (
+                      <div style={{ fontSize: 12, color: '#444', marginTop: 3 }}>
+                        Example rewrite: {s.exampleRewrite}
+                      </div>
+                    )}
+                  </li>
+                ))}
               </ol>
             </div>
           )}

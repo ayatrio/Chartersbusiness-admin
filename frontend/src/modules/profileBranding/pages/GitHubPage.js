@@ -18,6 +18,7 @@ export default function GitHubPage() {
 
   const [username, setUsername] = useState('');
   const [github, setGithub] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
 
@@ -31,6 +32,13 @@ export default function GitHubPage() {
     try {
       const { data } = await profileService.getScore();
       const gh = data.profile?.github || {};
+      const toolSuggestions = Array.isArray(data.profile?.suggestions)
+        ? data.profile.suggestions.filter((item) => (
+          !item?.completed && String(item?.tool || '').toLowerCase() === 'github'
+        ))
+        : [];
+
+      setSuggestions(toolSuggestions);
       if (gh.username) {
         setUsername(gh.username);
         setGithub(gh);
@@ -69,6 +77,7 @@ export default function GitHubPage() {
       setUsername(normalizedUsername);
 
       await profileService.calculateScore();
+      await load();
 
       toast.success('GitHub profile fetched & score updated!');
     } catch (err) {
@@ -243,6 +252,48 @@ export default function GitHubPage() {
                 <RiTimeLine /> Auto-fetched from GitHub API
               </p>
             </Card>
+
+            {suggestions.length > 0 && (
+              <Card>
+                <h4 style={{ marginBottom: 10 }}>GitHub improvement suggestions</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {suggestions.map((item, index) => (
+                    <div key={item?._id || index} style={{ padding: 10, border: '1px solid #eee', borderRadius: 8 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600 }}>{item?.text}</p>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                        <span style={{
+                          fontSize: 11,
+                          color: '#555',
+                          background: '#f4f4f4',
+                          borderRadius: 999,
+                          padding: '2px 8px',
+                          textTransform: 'capitalize'
+                        }}>
+                          Priority: {item?.priority || 'medium'}
+                        </span>
+                        <span style={{
+                          fontSize: 11,
+                          color: '#555',
+                          background: '#f4f4f4',
+                          borderRadius: 999,
+                          padding: '2px 8px'
+                        }}>
+                          Expected +{item?.expectedScoreImpact || 0}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                        Impact: {item?.impact || `Expected +${item?.expectedScoreImpact || 0} points`}
+                      </p>
+                      {item?.exampleRewrite ? (
+                        <p style={{ fontSize: 12, color: '#444', marginTop: 4 }}>
+                          Example rewrite: {item.exampleRewrite}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
           </div>
 
         </div>
