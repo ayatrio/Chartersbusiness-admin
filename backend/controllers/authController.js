@@ -193,26 +193,52 @@ exports.updateProfile = async (req, res, next) => {
   try {
     const { firstName, lastName, phone, selectedCourse } = req.body;
 
-    const admin = await Admin.findById(req.user._id);
+    let admin = await Admin.findById(req.user._id);
+    let isUserModel = false;
+
+    if (!admin) {
+      admin = await UserModel.findById(req.user._id);
+      isUserModel = true;
+    }
 
     if (!admin) {
       return res.status(404).json({
         success: false,
-        message: 'Admin not found'
+        message: 'Account not found'
       });
     }
 
-    if (firstName) admin.firstName = firstName;
-    if (lastName) admin.lastName = lastName;
-    if (phone) admin.phone = phone;
-    if (selectedCourse) admin.selectedCourse = selectedCourse;
+    if (isUserModel) {
+      if (firstName || lastName) {
+        admin.name = `${firstName || ''} ${lastName || ''}`.trim();
+      }
+      if (phone) admin.phoneNumber = phone;
+      if (selectedCourse) admin.courseInterestedIn = selectedCourse;
+    } else {
+      if (firstName) admin.firstName = firstName;
+      if (lastName) admin.lastName = lastName;
+      if (phone) admin.phone = phone;
+      if (selectedCourse) admin.selectedCourse = selectedCourse;
+    }
 
     await admin.save();
+
+    let responseUser = normalizeUserData(admin);
+    if (isUserModel) {
+      const CandidateAccess = require('../models/CandidateAccess');
+      const access = await CandidateAccess.findOne({ chartersUserId: String(admin._id) });
+      if (access) {
+        responseUser.permissions = access.permissions || {};
+        if (access.userCategory === 'candidate') {
+          responseUser.role = 'candidate';
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      user: normalizeUserData(admin)
+      user: responseUser
     });
   } catch (error) {
     next(error);
@@ -303,18 +329,57 @@ exports.exchangeCode = async (req, res, next) => {
     const { email, userId, id } = decodedToken;
     const searchId = userId || id;
 
-    // 1. Search in Admin collection
     let admin = null;
-    if (searchId) admin = await Admin.findById(searchId);
-    if (!admin && email) admin = await Admin.findOne({ email });
-    
-    let isFoundInAdmin = true;
+    let isFoundInAdmin = false;
 
-    // 2. Search in User collection if not found in Admin
-    if (!admin) {
-      if (searchId) admin = await UserModel.findById(searchId);
-      if (!admin && email) admin = await UserModel.findOne({ email });
-      isFoundInAdmin = false;
+    // 1. Search in User collection first
+    let rawUser = null;
+    if (searchId) rawUser = await UserModel.findById(searchId);
+    if (!rawUser && email) rawUser = await UserModel.findOne({ email });
+
+    if (rawUser) {
+      admin = rawUser.toObject();
+      admin.id = String(rawUser._id);
+
+      // If user is admin or recruiter, attempt to find corresponding Admin record and merge permissions
+      if (admin.role === 'admin' || admin.role === 'recruiter') {
+        const adminDoc = await Admin.findOne({ email: admin.email });
+        if (adminDoc) {
+          admin.permissions = adminDoc.permissions || {};
+          admin.permissionsVersion = adminDoc.permissionsVersion || 0;
+        } else {
+          admin.permissions = {};
+          admin.permissionsVersion = 0;
+        }
+      } else {
+        // Otherwise, it's a candidate/student, get from CandidateAccess
+        const CandidateAccess = require('../models/CandidateAccess');
+        const access = await CandidateAccess.findOne({ chartersUserId: String(rawUser._id) });
+        if (access) {
+          admin.permissions = access.permissions || {};
+          admin.userCategory = access.userCategory || 'user';
+          if (access.status) {
+            admin.status = access.status;
+          }
+          if (access.userCategory === 'candidate') {
+            admin.role = 'candidate';
+          }
+        } else {
+          admin.permissions = {};
+          admin.userCategory = 'user';
+        }
+      }
+    } else {
+      // 2. Search in Admin collection if not found in User (for backwards compatibility)
+      let adminDoc = null;
+      if (searchId) adminDoc = await Admin.findById(searchId);
+      if (!adminDoc && email) adminDoc = await Admin.findOne({ email });
+
+      if (adminDoc) {
+        admin = adminDoc.toObject();
+        admin.id = String(adminDoc._id);
+        isFoundInAdmin = true;
+      }
     }
 
     if (!admin) {

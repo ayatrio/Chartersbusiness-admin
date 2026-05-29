@@ -40,7 +40,8 @@ export default function LoginPage() {
       toast.success('Welcome back!');
 
       // Redirect to new dashboard
-      const destination = res?.user?.role === 'admin' ? '/admin' : '/home';
+      const role = String(res?.user?.role || '').toLowerCase();
+      const destination = (role === 'admin' || role === 'recruiter') ? '/admin' : '/home';
       navigate(destination);
     } catch (err) {
       console.error(err);

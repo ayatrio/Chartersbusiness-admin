@@ -2,7 +2,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const HOSTED_API_BASE_URL = process.env.REACT_APP_API_URL || 'https://charters-business-admin.onrender.com/api';
-const LOCAL_API_BASE_URL = 'http://localhost:5000/api';
+const LOCAL_API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
 /**
  * The URL of the main Charter Business application where SSO redirects lead.

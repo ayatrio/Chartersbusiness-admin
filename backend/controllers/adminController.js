@@ -1,9 +1,21 @@
 const mongoose = require('mongoose');
-const User = require('../models/Admin');
+const Admin = require('../models/Admin');
+const UserModelRaw = require('../models/User.model');
+const User = UserModelRaw.default || UserModelRaw;
 const ProfileBranding = require('../models/ProfileBranding');
 const CandidateLink = require('../models/CandidateLink');
 const CandidateAccess = require('../models/CandidateAccess');
 const AuditLog = require('../models/AuditLog');
+
+const findAdminOrUserById = async (id) => {
+  let doc = await Admin.findById(id);
+  let modelType = 'Admin';
+  if (!doc) {
+    doc = await User.findById(id);
+    modelType = 'User';
+  }
+  return { doc, modelType };
+};
 const chartersAdminService = require('../services/chartersAdminService');
 const {
   cloneDefaultPermissions,
@@ -352,11 +364,16 @@ const resolveDisplayRole = (sourceRole, access = null) => {
 const toLocalCandidateShape = (userDoc) => {
   if (!userDoc) return null;
 
-  const firstName = userDoc.firstName || '';
-  const lastName = userDoc.lastName || '';
-  const fullName = `${firstName} ${lastName}`.trim();
+  let firstName = userDoc.firstName || '';
+  let lastName = userDoc.lastName || '';
+  let fullName = userDoc.name || `${firstName} ${lastName}`.trim();
+  if (userDoc.name && !firstName) {
+    const names = splitName(userDoc.name);
+    firstName = names.firstName;
+    lastName = names.lastName;
+  }
   const role = mapLocalUserRole(userDoc.role);
-  const status = userDoc.isActive === false ? 'disabled' : 'active';
+  const status = userDoc.status || (userDoc.isActive === false ? 'disabled' : 'active');
 
   return {
     _id: String(userDoc._id),
@@ -366,8 +383,8 @@ const toLocalCandidateShape = (userDoc) => {
     firstName,
     lastName,
     email: userDoc.email || null,
-    phoneNumber: userDoc.phone || null,
-    courseInterestedIn: userDoc.selectedCourse || null,
+    phoneNumber: userDoc.phoneNumber || userDoc.phone || null,
+    courseInterestedIn: userDoc.courseInterestedIn || userDoc.selectedCourse || null,
     role,
     status,
     isActive: status === 'active',
@@ -378,9 +395,16 @@ const toLocalCandidateShape = (userDoc) => {
 };
 
 const toMirroredCandidateShape = ({ chartersUserId, link, access, localUser }) => {
-  const baseName = localUser
-    ? `${localUser.firstName || ''} ${localUser.lastName || ''}`.trim()
-    : (link?.email ? String(link.email).split('@')[0] : 'Candidate');
+  let baseName = 'Candidate';
+  if (localUser) {
+    if (localUser.name) {
+      baseName = localUser.name;
+    } else {
+      baseName = `${localUser.firstName || ''} ${localUser.lastName || ''}`.trim();
+    }
+  } else if (link?.email) {
+    baseName = String(link.email).split('@')[0];
+  }
   const names = splitName(baseName);
   const status = access?.status || mapLocalUserStatus(localUser?.isActive);
 
@@ -392,8 +416,8 @@ const toMirroredCandidateShape = ({ chartersUserId, link, access, localUser }) =
     firstName: names.firstName,
     lastName: names.lastName,
     email: localUser?.email || link?.email || null,
-    phoneNumber: localUser?.phone || link?.phone || null,
-    courseInterestedIn: localUser?.selectedCourse || null,
+    phoneNumber: localUser?.phoneNumber || localUser?.phone || link?.phone || null,
+    courseInterestedIn: localUser?.courseInterestedIn || localUser?.selectedCourse || null,
     role: resolveDisplayRole(localUser?.role || 'user', access),
     userCategory: normalizeUserCategory(access?.userCategory) || null,
     status,
@@ -407,9 +431,7 @@ const toMirroredCandidateShape = ({ chartersUserId, link, access, localUser }) =
 const getMirroredCandidateById = async (chartersUserId) => {
   const link = await CandidateLink.findOne({ chartersUserId }).lean();
   const access = await CandidateAccess.findOne({ chartersUserId }).lean();
-  const localUser = await User.findById(chartersUserId)
-    .select('email firstName lastName phone selectedCourse role isActive createdAt updatedAt lastLogin')
-    .lean();
+  const { doc: localUser } = await findAdminOrUserById(chartersUserId);
 
   if (!link && !localUser && !access) {
     return null;
@@ -436,7 +458,7 @@ const getMirroredUsersForAdmin = async () => {
     CandidateAccess.find({ chartersUserId: { $in: chartersIds } }),
     pbUserIds.length
       ? User.find({ _id: { $in: pbUserIds } })
-        .select('firstName lastName role isActive createdAt updatedAt lastLogin')
+        .select('name email phoneNumber role status isActive createdAt updatedAt lastLogin')
       : [],
     pbUserIds.length
       ? ProfileBranding.find({ userId: { $in: pbUserIds } }).select('userId scores lastCalculated')
@@ -454,7 +476,7 @@ const getMirroredUsersForAdmin = async () => {
     const profile = link.pbUserId ? profileMap.get(String(link.pbUserId)) : null;
 
     const fullName = localUser
-      ? `${localUser.firstName || ''} ${localUser.lastName || ''}`.trim()
+      ? (localUser.name || `${localUser.firstName || ''} ${localUser.lastName || ''}`.trim())
       : '';
     const derivedName = fullName || (link.email ? String(link.email).split('@')[0] : 'Candidate');
     const names = splitName(derivedName);
@@ -467,8 +489,8 @@ const getMirroredUsersForAdmin = async () => {
       name: derivedName || null,
       firstName: names.firstName,
       lastName: names.lastName,
-      email: link.email || null,
-      phone: link.phone || null,
+      email: link.email || localUser?.email || null,
+      phone: link.phone || localUser?.phoneNumber || localUser?.phone || null,
       role: resolveDisplayRole(localUser?.role || 'user', access),
       userCategory: normalizeUserCategory(access?.userCategory) || null,
       status,
@@ -484,7 +506,7 @@ const getMirroredUsersForAdmin = async () => {
 
 const getLocalUsersForAdmin = async () => {
   const users = await User.find({})
-    .select('email firstName lastName phone selectedCourse role permissions permissionsVersion isActive createdAt updatedAt lastLogin');
+    .select('email name phoneNumber courseInterestedIn role status isActive createdAt updatedAt lastLogin');
 
   if (!users.length) return [];
 
@@ -504,7 +526,7 @@ const getLocalUsersForAdmin = async () => {
     const access = accessMap.get(chartersUserId) || null;
     const profile = profileMap.get(chartersUserId) || null;
     const baseCandidate = toLocalCandidateShape(userDoc);
-    const status = mapLocalUserStatus(userDoc.isActive);
+    const status = userDoc.status || mapLocalUserStatus(userDoc.isActive);
     const mergedPermissions = normalizePermissions(
       deepMerge(userDoc.permissions || {}, access?.permissions || {})
     );
@@ -603,11 +625,11 @@ const ensureCandidateLink = async (candidate) => {
   let pbUser = null;
 
   if (candidate.email) {
-    pbUser = await User.findOne({ email: candidate.email.toLowerCase() }).select('_id email phone');
+    pbUser = await User.findOne({ email: candidate.email.toLowerCase() }).select('_id email phoneNumber');
   }
 
   if (!pbUser && candidate.phoneNumber) {
-    pbUser = await User.findOne({ phone: candidate.phoneNumber }).select('_id email phone');
+    pbUser = await User.findOne({ phoneNumber: candidate.phoneNumber }).select('_id email phoneNumber');
   }
 
   link = await CandidateLink.create({
@@ -811,8 +833,8 @@ exports.updatePermissions = async (req, res, next) => {
     );
 
     if (usedLocalFallback) {
-      const localUser = await User.findById(chartersUserId).select('permissions permissionsVersion');
-      if (localUser) {
+      const { doc: localUser, modelType } = await findAdminOrUserById(chartersUserId);
+      if (localUser && modelType === 'Admin') {
         localUser.permissions = mergedPermissions;
         localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
         await localUser.save();
@@ -909,11 +931,13 @@ exports.elevateUserToCandidate = async (req, res, next) => {
     );
 
     if (usedLocalFallback) {
-      const localUser = await User.findById(chartersUserId).select('role permissionsVersion');
-      if (localUser && String(localUser.role || '').toLowerCase() !== 'admin') {
-        localUser.role = 'candidate';
-        localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
-        await localUser.save();
+      const { doc: localUser, modelType } = await findAdminOrUserById(chartersUserId);
+      if (localUser && modelType === 'Admin') {
+        if (String(localUser.role || '').toLowerCase() !== 'admin') {
+          localUser.role = 'candidate';
+          localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
+          await localUser.save();
+        }
       }
     }
 
@@ -974,7 +998,7 @@ exports.deleteCandidate = async (req, res, next) => {
         throw error;
       }
 
-      const localUser = await User.findById(chartersUserId).select('role isActive permissionsVersion');
+      const { doc: localUser, modelType } = await findAdminOrUserById(chartersUserId);
       if (!localUser) {
         return res.status(404).json({
           success: false,
@@ -982,15 +1006,20 @@ exports.deleteCandidate = async (req, res, next) => {
         });
       }
 
-      if (mapLocalUserRole(localUser.role) === 'admin') {
+      if (modelType === 'Admin' && mapLocalUserRole(localUser.role) === 'admin') {
         return res.status(400).json({
           success: false,
           message: 'Admin accounts cannot be removed',
         });
       }
 
-      localUser.isActive = false;
-      localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
+      if (modelType === 'User') {
+        localUser.status = 'disabled';
+        localUser.isActive = false;
+      } else {
+        localUser.isActive = false;
+        localUser.permissionsVersion = Number(localUser.permissionsVersion || 0) + 1;
+      }
       await localUser.save();
       usedLocalFallback = true;
     }
@@ -1048,10 +1077,13 @@ exports.getPermissions = async (req, res, next) => {
         throw error;
       }
 
-      const localUser = await User.findById(chartersUserId).select('isActive');
+      const { doc: localUser } = await findAdminOrUserById(chartersUserId);
       if (localUser) {
+        const isActive = typeof localUser.status === 'string'
+          ? localUser.status === 'active'
+          : Boolean(localUser.isActive);
         candidate = {
-          status: localUser.isActive === false ? 'disabled' : 'active',
+          status: isActive ? 'active' : 'disabled',
         };
       } else {
         const crossDbCandidate = await getCrossDbUserById(chartersUserId);

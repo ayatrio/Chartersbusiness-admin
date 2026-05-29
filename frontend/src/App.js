@@ -1,13 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate as RouterNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-// Pages
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage'; // Profile Branding (existing)
-import DashboardHome from './pages/DashboardHome'; // 🔥 NEW MAIN DASHBOARD
+// Auth pages removed - Auth is handled by Users Repo
+import DashboardHome from './pages/DashboardHome'; //NEW MAIN DASHBOARD
 import LinkedInPage from './pages/LinkedInPage';
 import GitHubPage from './pages/GitHubPage';
 import YouTubePage from './pages/YouTubePage';
@@ -30,14 +27,90 @@ import CounselingPage from './pages/CounselingPage';
 import ProfilePage from './pages/ProfilePage';
 import ContactPage from './pages/ContactPage';
 import DashboardOverview from './pages/DashboardOverview';
+import ApplyFormPage from './pages/ApplyFormPage';
 
-const getDefaultRoute = (user) => (user?.role === 'admin' ? '/admin' : (user?.role === 'user' ? '/dashboard-overview' : '/home'));
+// Custom Navigate component to preserve URL query parameters (like ?code=...)
+const Navigate = ({ to, replace }) => {
+  const location = useLocation();
+  const toObj = typeof to === 'string'
+    ? { pathname: to, search: location.search }
+    : { pathname: to.pathname, search: to.search || location.search, state: to.state };
+  return <RouterNavigate to={toObj} replace={replace} />;
+};
+
+const getDefaultRoute = (user) => {
+
+  const role = String(
+    user?.role || ''
+  ).toLowerCase();
+
+  if (
+    role === 'admin' ||
+    role === 'recruiter'
+  ) {
+    return '/admin';
+  }
+
+  // IMPORTANT:
+  // normal students/candidates
+
+  if (
+    role === 'user' ||
+    role === 'candidate' ||
+    role === 'student' ||
+    role === 'enrolled_student'
+  ) {
+    return '/apply-form';
+  }
+
+  return '/apply-form';
+};
 
 // 🔐 Protected route (logged-in users)
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
+  console.log(user,loading);
   if (loading) return <PageLoader />;
-  return user ? children : <Navigate to="/login" replace />;
+  if (!user) {
+    // Redirect to Users Repo for login
+    const mainUrl = process.env.REACT_APP_MAIN_APP_URL || 'http://localhost:3000';
+    window.location.href = `${mainUrl}/login`;
+    return null;
+  }
+
+  const role = String(user.role || '').toLowerCase();
+  if (role === 'admin' || role === 'recruiter') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return children;
+};
+
+// 🔐 Enrolled student only route
+const EnrolledRoute = ({ children }) => {
+  const { user, loading, applications } = useAuth();
+
+  if (loading) return <PageLoader />;
+
+  if (!user) {
+    const mainUrl = process.env.REACT_APP_MAIN_APP_URL || 'http://localhost:3000';
+    window.location.href = `${mainUrl}/login`;
+    return null;
+  }
+
+  const role = String(user.role || '').toLowerCase();
+  if (role === 'admin' || role === 'recruiter') {
+    return children;
+  }
+
+  const isApproved = (applications || []).some((app) => app.status === 'approved');
+  const isEnrolled = isApproved || role === 'enrolled_student' || role === 'candidate';
+
+  if (!isEnrolled) {
+    return <Navigate to="/apply-form" replace />;
+  }
+
+  return children;
 };
 
 // 🔐 Admin-only route
@@ -46,9 +119,14 @@ const AdminRoute = ({ children }) => {
 
   if (loading) return <PageLoader />;
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    const mainUrl = process.env.REACT_APP_MAIN_APP_URL || 'http://localhost:3000';
+    window.location.href = `${mainUrl}/login`;
+    return null;
+  }
 
-  if (user.role !== 'admin') {
+  const role = String(user.role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'recruiter') {
     return <Navigate to="/home" replace />;
   }
 
@@ -63,22 +141,28 @@ const PageLoader = () => (
 );
 
 function AppRoutes() {
-  const { user } = useAuth();
-  const defaultRoute = getDefaultRoute(user);
+  const { user, applications } = useAuth();
+  
+  const role = String(user?.role || '').toLowerCase();
+  const isApproved = (applications || []).some((app) => app.status === 'approved');
+  const isEnrolled = isApproved || role === 'enrolled_student' || role === 'candidate';
+
+  let defaultRoute = '/apply-form';
+  if (role === 'admin' || role === 'recruiter') {
+    defaultRoute = '/admin';
+  } else if (isEnrolled) {
+    defaultRoute = '/home';
+  }
 
   return (
     <Routes>
-      {/* Auth */}
-      <Route path="/login" element={user ? <Navigate to={defaultRoute} /> : <LoginPage />} />
-      <Route path="/register" element={user ? <Navigate to={defaultRoute} /> : <RegisterPage />} />
-
-      {/* 🔥 MAIN DASHBOARD */}
+      
       <Route
         path="/home"
         element={
-          <ProtectedRoute>
+          <EnrolledRoute>
             <DashboardHome />
-          </ProtectedRoute>
+          </EnrolledRoute>
         }
       />
 
@@ -86,9 +170,7 @@ function AppRoutes() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
+          <Navigate to={defaultRoute} replace />
         }
       />
 
@@ -104,7 +186,8 @@ function AppRoutes() {
       <Route path="/ai-interview/:id" element={<ProtectedRoute><AIInterviewPage /></ProtectedRoute>} />
 
       {/* Additionals */}
-      <Route path="/application-status" element={<ProtectedRoute><ApplicationStatusPage /></ProtectedRoute>} />
+      <Route path="/apply-form" element={<ProtectedRoute><ApplyFormPage /></ProtectedRoute>} />
+      <Route path="/application-status" element={<ProtectedRoute><DashboardOverview /></ProtectedRoute>} />
       <Route path="/counseling" element={<ProtectedRoute><CounselingPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/contact" element={<ProtectedRoute><ContactPage /></ProtectedRoute>} />

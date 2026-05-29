@@ -1,5 +1,6 @@
 const Counseling = require('../models/Counseling.model.js');
-const User = require('../models/Admin.js');
+const UserModelRaw = require('../models/User.model.js');
+const User = UserModelRaw.default || UserModelRaw;
 const asyncHandler = require('../utils/asyncHandler.js');
 const ApiResponse = require('../utils/ApiResponse.js');
 const ApiError = require('../utils/ApiError.js');
@@ -50,7 +51,7 @@ exports.submitCounseling = asyncHandler(async (req, res) => {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         password: generatedPassword,
-        selectedCourse: program || 'Certified Management Professional (CMP)',
+        courseInterestedIn: program || 'Certified Management Professional (CMP)',
         isFirstLogin: true,
         tempPassword: generatedPassword,
       });

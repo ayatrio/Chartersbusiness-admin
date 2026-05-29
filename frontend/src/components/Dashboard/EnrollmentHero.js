@@ -2,7 +2,7 @@ import React from 'react';
 import { RiMagicLine, RiArrowRightLine } from 'react-icons/ri';
 
 const EnrollmentHero = ({ user, onApply }) => {
-    const isCandidate = user?.role === 'candidate' || user?.role === 'admin';
+    const isCandidate = String(user?.role || '').toLowerCase() === 'candidate';
 
     return (
         <section className="bg-black rounded-none py-5 text-white relative overflow-hidden flex items-center min-h-[500px]">

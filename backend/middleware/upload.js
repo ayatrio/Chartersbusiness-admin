@@ -1,51 +1,103 @@
+
+// const multer = require('multer');
+// const path = require('path');
+// const fs = require('fs');
+
+// const uploadsDir = path.resolve(__dirname, '../uploads');
+
+// if (!fs.existsSync(uploadsDir)) {
+//   fs.mkdirSync(uploadsDir, { recursive: true });
+//   console.log('Created uploads directory');
+// }
+
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, uploadsDir);
+//   },
+//   filename: (req, file, cb) => {
+//     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+//     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+//   }
+// });
+
+// const fileFilter = (req, file, cb) => {
+//   const allowedTypes = {
+//     // existing
+//     resume:         ['.pdf'],
+//     certificate:    ['.pdf', '.jpg', '.jpeg', '.png'],
+//     profilePicture: ['.jpg', '.jpeg', '.png', '.gif'],
+//     // admission documents
+//     photoId:        ['.pdf', '.jpg', '.jpeg', '.png'],
+//     marksheet:      ['.pdf', '.jpg', '.jpeg', '.png'],
+//     photo:          ['.jpg', '.jpeg', '.png'],
+//     workProof:      ['.pdf', '.jpg', '.jpeg', '.png'],
+//   };
+
+//   const ext = path.extname(file.originalname).toLowerCase();
+//   const fieldName = file.fieldname;
+
+//   if (allowedTypes[fieldName] && allowedTypes[fieldName].includes(ext)) {
+//     cb(null, true);
+//   } else {
+//     cb(new Error(`Invalid file type for ${fieldName}. Allowed: ${allowedTypes[fieldName]?.join(', ')}`), false);
+//   }
+// };
+
+// const upload = multer({
+//   storage: storage,
+//   fileFilter: fileFilter,
+//   limits: {
+//     fileSize: 10 * 1024 * 1024
+//   }
+// });
+
+// module.exports = upload;
+
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
-const uploadsDir = path.resolve(__dirname, '../uploads');
+const storage = multer.memoryStorage();
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('Created uploads directory');
-}
-
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-// File filter
 const fileFilter = (req, file, cb) => {
-  // Allowed file types
   const allowedTypes = {
+    // existing
     resume: ['.pdf'],
     certificate: ['.pdf', '.jpg', '.jpeg', '.png'],
-    profilePicture: ['.jpg', '.jpeg', '.png', '.gif']
+    profilePicture: ['.jpg', '.jpeg', '.png', '.gif'],
+
+    // admission documents
+    photoId: ['.pdf', '.jpg', '.jpeg', '.png'],
+    marksheet: ['.pdf', '.jpg', '.jpeg', '.png'],
+    photo: ['.jpg', '.jpeg', '.png'],
+    workProof: ['.pdf', '.jpg', '.jpeg', '.png'],
   };
 
   const ext = path.extname(file.originalname).toLowerCase();
   const fieldName = file.fieldname;
 
-  if (allowedTypes[fieldName] && allowedTypes[fieldName].includes(ext)) {
+  if (
+    allowedTypes[fieldName] &&
+    allowedTypes[fieldName].includes(ext)
+  ) {
     cb(null, true);
   } else {
-    cb(new Error(`Invalid file type for ${fieldName}. Allowed: ${allowedTypes[fieldName].join(', ')}`), false);
+    cb(
+      new Error(
+        `Invalid file type for ${fieldName}. Allowed: ${allowedTypes[
+          fieldName
+        ]?.join(', ')}`
+      ),
+      false
+    );
   }
 };
 
-// Configure multer
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+  storage,
+  fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
+    fileSize: 10 * 1024 * 1024, // 10MB
+  },
 });
 
 module.exports = upload;

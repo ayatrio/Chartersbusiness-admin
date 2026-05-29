@@ -11,7 +11,7 @@ const {
 
 const router = express.Router();
 
-router.post('/login', login);
+// Admin login moved to USERS REPO
 router.get('/me', protect, requireAdmin, getMe);
 
 module.exports = router;

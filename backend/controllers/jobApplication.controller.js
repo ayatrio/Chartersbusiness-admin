@@ -1,7 +1,8 @@
 const JobApplication = require('../models/JobApplication.model.js');
 const JobPosting = require('../models/JobPosting.model.js');
 const InternshipPosting = require('../models/InternshipPosting.model.js');
-const User = require('../models/Admin.js');
+const UserModelRaw = require('../models/User.model.js');
+const User = UserModelRaw.default || UserModelRaw;
 const asyncHandler = require('../utils/asyncHandler.js');
 const ApiResponse = require('../utils/ApiResponse.js');
 const ApiError = require('../utils/ApiError.js');

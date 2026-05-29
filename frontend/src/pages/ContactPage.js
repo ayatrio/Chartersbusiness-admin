@@ -17,8 +17,9 @@ export default function ContactPage() {
             return;
         }
 
+        const role = String(user.role || '').toLowerCase();
         // Redirect admin/recruiter to their specific admin dashboard if they land here
-        if (user.role === 'admin' || user.role === 'recruiter') {
+        if (role === 'admin' || role === 'recruiter') {
             navigate('/admin/dashboard');
             return;
         }
@@ -48,7 +49,8 @@ export default function ContactPage() {
     }
 
     // Final gate
-    if (!user || user.role === 'admin' || user.role === 'recruiter') {
+    const role = String(user?.role || '').toLowerCase();
+    if (!user || role === 'admin' || role === 'recruiter') {
         return null;
     }
 

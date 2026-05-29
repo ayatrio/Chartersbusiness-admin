@@ -12,11 +12,11 @@ const {
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
-router.post('/register', register);
-router.post('/login', login);
+// Login and Register moved to USERS REPO
 router.get('/me', protect, getMe);
 router.put('/update-profile', protect, updateProfile);
 router.put('/change-password', protect, changePassword);
 router.post('/redirect-code', protect, redirectCode);
+router.post('/exchange-code', exchangeCode);
 
 module.exports = router;

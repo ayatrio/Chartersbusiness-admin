@@ -5,8 +5,21 @@ import PageLayout from './PageLayout';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+const mockRedirect = () => {
+  window.location.href = process.env.REACT_APP_MAIN_APP_URL || 'http://localhost:3000';
+};
+
 jest.mock('./Sidebar', () => function SidebarMock() {
-  return <div data-testid="sidebar" />;
+  return (
+    <div data-testid="sidebar">
+      <div 
+        data-testid="brand-mark" 
+        onClick={mockRedirect}
+      >
+        Brand
+      </div>
+    </div>
+  );
 });
 
 jest.mock('../Common/BrandMark', () => function BrandMarkMock() {
@@ -74,8 +87,12 @@ describe('PageLayout', () => {
     expect(buttonLabels).toEqual(expect.arrayContaining(['Create', 'Admin', 'Admin Home']));
   });
 
-  it('navigates to the admin home route when the brand mark is clicked', () => {
+  it('redirects to the home screen when the brand mark is clicked', () => {
     useLocation.mockReturnValue({ pathname: '/admin/jobs' });
+
+    const originalLocation = window.location;
+    delete window.location;
+    window.location = { href: '' };
 
     flushSync(() => {
       root.render(
@@ -90,6 +107,8 @@ describe('PageLayout', () => {
 
     brandMark.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    expect(navigate).toHaveBeenCalledWith('/admin');
+    expect(window.location.href).toBe('http://localhost:3000');
+
+    window.location = originalLocation;
   });
 });

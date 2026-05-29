@@ -150,7 +150,8 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (user?.role === 'admin') {
+    const role = String(user?.role || '').toLowerCase();
+    if (role === 'admin' || role === 'recruiter') {
       fetchUsers();
     }
   }, [user, fetchUsers]);

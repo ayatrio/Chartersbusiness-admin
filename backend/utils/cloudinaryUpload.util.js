@@ -1,28 +1,42 @@
-const cloudinary = require('../config/cloudinary.config.js');
+const cloudinary = require('../config/cloudinary.config');
 const { Readable } = require('stream');
 
-const uploadToCloudinary = (fileBuffer, options = {}) => {
-  return new Promise((resolve, reject) => {
-    const {
-      folder = 'charters-business/resumes',
-      publicId,
-      resourceType = 'raw',
-    } = options;
 
+// ==========================================
+// Upload File To Cloudinary
+// ==========================================
+
+const uploadToCloudinary = (
+  fileBuffer,
+  {
+    folder = 'charters-business',
+    publicId,
+    resourceType = 'auto',
+    tags = [],
+  } = {}
+) => {
+  return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder,
         public_id: publicId,
         resource_type: resourceType,
         access_mode: 'public',
-        tags: ['resume', 'job-application'],
+        tags,
       },
       (error, result) => {
         if (error) {
-          reject(error);
-        } else {
-          resolve(result);
+          return reject(error);
         }
+
+        resolve({
+          url: result.secure_url,
+          publicId: result.public_id,
+          resourceType: result.resource_type,
+          originalName: result.original_filename,
+          format: result.format,
+          bytes: result.bytes,
+        });
       }
     );
 
@@ -30,53 +44,125 @@ const uploadToCloudinary = (fileBuffer, options = {}) => {
   });
 };
 
-const deleteFromCloudinary = async (publicId, resourceType = 'raw') => {
+
+// ==========================================
+// Resume Upload Helper
+// ==========================================
+
+const uploadResume = async (fileBuffer, userId) => {
+  return uploadToCloudinary(fileBuffer, {
+    folder: 'charters-business/resumes',
+    publicId: `resume-${userId}-${Date.now()}`,
+    resourceType: 'raw',
+    tags: ['resume', 'job-application'],
+  });
+};
+
+
+// ==========================================
+// Admission Document Upload Helper
+// ==========================================
+
+const uploadAdmissionDocument = async (
+  fileBuffer,
+  documentType,
+  userId
+) => {
+  const folderMap = {
+    photoId: 'charters-business/admissions/photo-ids',
+    marksheet: 'charters-business/admissions/marksheets',
+    photo: 'charters-business/admissions/photos',
+    workProof: 'charters-business/admissions/work-proofs',
+  };
+
+  const imageDocuments = ['photo'];
+
+  return uploadToCloudinary(fileBuffer, {
+    folder:
+      folderMap[documentType] ||
+      'charters-business/admissions/others',
+
+    publicId: `${documentType}-${userId}-${Date.now()}`,
+
+    resourceType: imageDocuments.includes(documentType)
+      ? 'image'
+      : 'auto',
+
+    tags: ['admission-document', documentType],
+  });
+};
+
+
+// ==========================================
+// Delete File From Cloudinary
+// ==========================================
+
+const deleteFromCloudinary = async (
+  publicId,
+  resourceType = 'auto'
+) => {
   try {
     return await cloudinary.uploader.destroy(publicId, {
       resource_type: resourceType,
     });
   } catch (error) {
-    console.error('Error deleting from Cloudinary:', error);
+    console.error('Cloudinary Delete Error:', error);
     throw error;
   }
 };
 
-const getCloudinaryUrl = (publicId, options = {}) => {
+
+// ==========================================
+// Generate Cloudinary URL
+// ==========================================
+
+const getCloudinaryUrl = (
+  publicId,
+  options = {}
+) => {
   return cloudinary.url(publicId, {
     secure: true,
-    resource_type: 'raw',
     ...options,
   });
 };
 
+
+// ==========================================
+// Extract Public ID From URL
+// ==========================================
+
 const extractPublicId = (url) => {
-  if (!url || !url.includes('cloudinary.com')) {
-    return null;
-  }
-
   try {
-    const parts = url.split('/upload/');
-    if (parts.length < 2) return null;
+    if (!url || !url.includes('cloudinary.com')) {
+      return null;
+    }
 
-    const pathParts = parts[1].split('/');
-    const publicIdParts = pathParts.filter(
-      (part) => !part.startsWith('v') && !part.includes('_')
-    );
+    const uploadIndex = url.indexOf('/upload/');
 
-    const publicIdWithExt = publicIdParts.join('/');
-    const publicId =
-      publicIdWithExt.substring(0, publicIdWithExt.lastIndexOf('.')) ||
-      publicIdWithExt;
+    if (uploadIndex === -1) {
+      return null;
+    }
+
+    let publicId = url.substring(uploadIndex + 8);
+
+    // Remove version if exists
+    publicId = publicId.replace(/^v\d+\//, '');
+
+    // Remove extension
+    publicId = publicId.replace(/\.[^/.]+$/, '');
 
     return publicId;
   } catch (error) {
-    console.error('Error extracting public ID:', error);
+    console.error('Extract Public ID Error:', error);
     return null;
   }
 };
 
+
 module.exports = {
   uploadToCloudinary,
+  uploadResume,
+  uploadAdmissionDocument,
   deleteFromCloudinary,
   getCloudinaryUrl,
   extractPublicId,

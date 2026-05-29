@@ -48,15 +48,66 @@ const applicationSchema = new mongoose.Schema(
         message: 'You must agree to the privacy policy',
       },
     },
-    status: {
-      type: String,
-      enum: ['pending', 'under_review', 'approved', 'rejected'],
-      default: 'pending',
-    },
+   status: {
+  type: String,
+  enum: ['draft', 'pending', 'under_review', 'approved', 'rejected'],
+  default: 'draft',   // ← was 'pending'
+},
     applicationNumber: {
       type: String,
       unique: true,
     },
+    // ── ADD after applicationNumber field ─────────────────────────
+
+currentStep: {
+  type: String,
+  enum: ['personal', 'academics', 'documents', 'payment', 'submitted'],
+  default: 'personal',
+},
+
+completedSteps: {
+  type: [String],
+  default: [],
+},
+
+academics: {
+  highestQualification: { type: String },
+  institution:          { type: String },
+  graduationYear:       { type: String },
+  fieldOfStudy:         { type: String },
+  gpa:                  { type: String },
+  workExperience:       { type: String },
+},
+
+documents: {
+  photoId: {
+    url: String,
+    publicId: String,
+  },
+
+  marksheet: {
+    url: String,
+    publicId: String,
+  },
+
+  photo: {
+    url: String,
+    publicId: String,
+  },
+
+  workProof: {
+    url: String,
+    publicId: String,
+  },
+},
+
+payment: {
+  status:        { type: String, enum: ['unpaid', 'paid', 'failed'], default: 'unpaid' },
+  method:        { type: String },
+  transactionId: { type: String },
+  amount:        { type: Number, default: 1999 },
+  paidAt:        { type: Date },
+},
   },
   { timestamps: true }
 );
